@@ -2,7 +2,7 @@
 
 ![Options dialog](images/dialog.jpg "Options dialog")
 
-GIMP script to export bitmap as GRAPHICS 4 file (aka SCREEN 5). GRAPHICS 4 specs are: 
+GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 specs are: 
 
 * 256x212 (or 256x192);
 * 16 color palette (from 512);
@@ -19,14 +19,18 @@ GIMP script to export bitmap as GRAPHICS 4 file (aka SCREEN 5). GRAPHICS 4 specs
 You may load files created by this plug-in using this simple code in BASIC:
 ```
 10 SCREEN 5
-20 BLOAD"NONAME.SC5",S
-30 GOTO 30
+20 VDP(9)=VDP(9) OR &H20
+30 BLOAD"NONAME.SC5",S
+40 BLOAD"NONAME.PAL",S
+50 COLOR=RESTORE
+60 GOTO 60
 ```
+First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palette.
 
 ## TODO
 
 * make it faster;
-* palette export;
+* ~~palette export~~;
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;

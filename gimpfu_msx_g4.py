@@ -16,7 +16,7 @@ import os
 import struct
 
 FILE_PREFIX = 0xFE
-DEFAULT_FILENAME = 'NONAME.SC5'
+DEFAULT_FILENAME = 'NONAME'
 DEFAULT_VRES = 'v212'
 DEFAULT_OUTPUT_DIR = os.getcwd()
 DEFAULT_OUTPUT_FMT = 'bin'
@@ -24,6 +24,7 @@ MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 212
 MAX_PAGES = 4
+PALETTE_OFFSET = 0x7680
 
 def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
     '''
@@ -41,6 +42,7 @@ def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
     errors = []
     drawable = gimpfu.pdb.gimp_image_active_drawable(img)
     num_bytes, cmap = gimpfu.pdb.gimp_image_get_cmap(img)
+    colors = []
 
     if num_bytes // 3 > MAX_COLORS:
         errors.append('Image must not have more than 16 colors.')
@@ -60,10 +62,27 @@ def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
         gimp.message("\n".join(errors))
         return
 
-    for i in range(0, num_bytes, 3):
-        print("(%i, %i, %i)\n" % (cmap[i], cmap[i+1], cmap[i+2]))
-
     gimpfu.pdb.gimp_progress_update(0)
+
+    # Saving palette
+    if palette:
+        colorsz = num_bytes // 3 * 2 + 1;
+        colors = [0] * colorsz
+        for i in range(0, num_bytes, 3):
+            r = round(float(cmap[i]) / 0xFF * 7)
+            g = round(float(cmap[i+1]) / 0xFF * 7)
+            b = round(float(cmap[i+2]) / 0xFF * 7)
+            colors[i // 3 * 2] = int(16 * r + b)
+            colors[i // 3 * 2 + 1] = int(g)
+            print("%i: (%f, %f, %f)" % (i // 3, r, g, b))
+
+        if image_enc == 'bin':
+            encoded = struct.pack('<BHHH{}B'.format(colorsz), FILE_PREFIX, PALETTE_OFFSET,
+                    PALETTE_OFFSET + len(colors), 0, *colors[0:colorsz])
+            file = open(os.path.join(folder, '%s.PAL' % filename), "wb")
+            file.write(encoded)
+            file.close()
+
     pixels = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
     step = 1.0 / height
     percent = 0.0
@@ -72,17 +91,17 @@ def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
         for x in range(0, width):
             _, indexed = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
             pos = x // 2 + y * 128
-            pixels[pos] |= indexed[0] << 4 if x % 2 else indexed[0];
+            pixels[pos] |= indexed[0] if x % 2 else indexed[0] << 4;
 
         percent += step
         gimpfu.pdb.gimp_progress_update(percent)
 
     if image_enc == 'bin':
-        encoded = struct.pack("<BHHH{}B".format(len(pixels)), FILE_PREFIX, 0, len(pixels), 0, *pixels)
+        encoded = struct.pack('<BHHH{}B'.format(len(pixels)), FILE_PREFIX, 0, len(pixels), 0, *pixels)
     else:
         return
 
-    file = open(os.path.join(folder, filename), "wb")
+    file = open(os.path.join(folder, '%s.SC5' % filename), "wb")
     file.write(encoded)
     file.close()
 
