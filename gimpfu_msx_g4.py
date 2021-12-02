@@ -62,6 +62,7 @@ def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
         gimp.message("\n".join(errors))
         return
 
+    gimpfu.pdb.gimp_progress_init('Converting to 9-bit colors...', None)
     gimpfu.pdb.gimp_progress_update(0)
 
     # Saving palette
@@ -69,12 +70,12 @@ def write_gr4(img, layer, filename, folder, layers2pages, palette, image_enc):
         colorsz = num_bytes // 3 * 2 + 1;
         colors = [0] * colorsz
         for i in range(0, num_bytes, 3):
-            r = round(float(cmap[i]) / 0xFF * 7)
-            g = round(float(cmap[i+1]) / 0xFF * 7)
-            b = round(float(cmap[i+2]) / 0xFF * 7)
-            colors[i // 3 * 2] = int(16 * r + b)
-            colors[i // 3 * 2 + 1] = int(g)
-            print("%i: (%f, %f, %f)" % (i // 3, r, g, b))
+            r = cmap[i] // 2 & 0x70
+            g = cmap[i+1] // 32
+            b = cmap[i+2] // 32
+            colors[i // 3 * 2] = r + b
+            colors[i // 3 * 2 + 1] = g
+            print("%i: %i, %i, %i" % (i // 3, r // 16, g, b))
 
         if image_enc == 'bin':
             encoded = struct.pack('<BHHH{}B'.format(colorsz), FILE_PREFIX, PALETTE_OFFSET,
