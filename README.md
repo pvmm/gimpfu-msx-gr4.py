@@ -9,6 +9,10 @@ GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 
 * 4 pages;
 * sprite mode 2;
 
+## Sample image
+
+![Sample image](images/sample.jpg "Sample image")
+
 ## Installation: 
 - Put this file into your GIMP plugin directory, i.e. `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimpfu_msx_g4.py`
 - Restart GIMP
@@ -29,8 +33,10 @@ First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palet
 
 ## TODO
 
+* ordered dithering;
 * make it faster;
-* ~~palette export~~;
+* ~~palette export;~~
+* ~~RGB to indexed conversion;~~
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;
