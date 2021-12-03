@@ -30,7 +30,8 @@ First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palet
 ## TODO
 
 * make it faster;
-* ~~palette export~~;
+* ~~palette export;~~
+* ~~RGB to indexed conversion;~~
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;
