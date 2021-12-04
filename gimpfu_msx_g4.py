@@ -34,6 +34,24 @@ tuple_key = lambda pair: pair[0]
 tuple_value = lambda pair: pair[1]
 
 
+def create_distance_query(palette):
+    palmap = {k:v for k, v in palette}
+
+    def query_index(pixel):
+        idx = palmap.get(pixel)
+        if idx:
+            print "** cache hit:", pixel
+            return palette[idx][1], palette[idx][0]
+        print "** cache miss:", pixel
+        dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
+        mdst = min(dsts, key=tuple_value)
+        #print 'pixel =', pixel, ' distances =', dsts, ' min =', mdst
+        palmap[pixel] = mdst[0]
+        return mdst[0], mdst[2]
+
+    return query_index
+
+
 def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
@@ -68,9 +86,12 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
 
     # Create temporary image
     new_image = gimpfu.pdb.gimp_image_duplicate(image)
-    histogram = create_histogram(new_image)
+
+    drawable = reduce_colors(new_image, dithering)
+    histogram = create_histogram(drawable)
     palette = quantize_colors(histogram, MAX_COLORS)
-    drawable = reduce_colors(image, palette, dithering)
+    print "palette =", palette
+    query = create_distance_query(palette)
 
     if exp_pal:
         pal9bits = [0] * (2 * MAX_COLORS)
@@ -92,12 +113,11 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
     step = 1.0 / height
     percent = 0.0
-    palette = {k:v for k, v in palette}
 
     for y in range(0, height):
         for x in range(0, width):
-            _, (color) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            indexed = palette[color]
+            _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            indexed, _ = query((r >> 5, g >> 5, b >> 5))
             pos = x // 2 + y * 128
             buffer[pos] |= indexed if x % 2 else indexed << 4;
 
@@ -117,8 +137,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     file.close()
 
 
-def create_histogram(image):
-    drawable = gimpfu.pdb.gimp_image_active_drawable(image)
+def create_histogram(drawable):
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
     histogram = {}
 
@@ -195,8 +214,8 @@ def scatter_noise(drawable, x, y, error):
                 continue
 
             nchannels, pixel = gimpfu.pdb.gimp_drawable_get_pixel(drawable, off_x, off_y)
-            npixel = tuple(min(255, round(color + error * debt)) for color, error in zip(pixel, error))
-            print 'errors:', error
+            npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
+            print 'error:', error
             print 'pos:', (off_x + 255 * off_y), " pixel/npixel:", pixel, npixel
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, off_x, off_y, nchannels, npixel)
 
@@ -205,10 +224,7 @@ def scatter_noise(drawable, x, y, error):
     print "===="
 
 
-def reduce_colors(image, palette, dithering=True):
-    def nearest_index(pixel):
-        return min([(idx, distance(pixel, color)) for color, idx in palette], key=tuple_value)[0]
- 
+def reduce_colors(image, dithering=True):
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
  
@@ -221,23 +237,19 @@ def reduce_colors(image, palette, dithering=True):
     for y in range(height):
         for x in range(width):
             nchannels, (r1, g1, b1) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            nr = round(float(r1) / 0xff * 7)
-            ng = round(float(g1) / 0xff * 7)
-            nb = round(float(b1) / 0xff * 7)
-            print 'pos:', (x + 255 * y), " pixel:", (r1, g1, b1)
-            index = nearest_index((nr, ng, nb))
-            gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, palette[index][0])
+            r2 = int(round(float(r1) / 0xff * 7)) << 5
+            g2 = int(round(float(g1) / 0xff * 7)) << 5
+            b2 = int(round(float(b1) / 0xff * 7)) << 5
+            gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, (r2, g2, b2))
 
             if dithering:
-                error = [new - old for old, new in zip((r1, g1, b1), (nr, ng, nb))]
+                error = [old - new for old, new in zip((r1, g1, b1), (r2, g2, b2))]
                 scatter_noise(drawable, x, y, error)
 
         percent += step
         gimpfu.pdb.gimp_progress_update(percent)
 
     return drawable
-
-
 
 
 gimpfu.register("msx_gr4_exporter",
