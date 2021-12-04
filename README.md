@@ -27,7 +27,7 @@ You may load files created by this plug-in using this simple code in BASIC:
 30 BLOAD"NONAME.SC5",S
 40 BLOAD"NONAME.PAL",S
 50 COLOR=RESTORE
-60 GOTO 60
+60 IF INKEY$ = "" GOTO 60
 ```
 First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palette.
 

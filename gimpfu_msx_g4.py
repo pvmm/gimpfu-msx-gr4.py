@@ -185,20 +185,24 @@ def quantize_colors(histogram, length):
 
 def scatter_noise(drawable, x, y, error):
     NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
+    width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
 
     for offset_x, offset_y, debt in NEIGHBORS:
         try:
             off_x, off_y = x + offset_x, y + offset_y
 
-            if off_x < 0 or off_y < 0:
+            if off_x < 0 or off_y < 0 or off_x >= width or off_y >= height:
                 continue
 
             nchannels, pixel = gimpfu.pdb.gimp_drawable_get_pixel(drawable, off_x, off_y)
-            npixel = tuple(min(255, color + error * debt) for color, error in zip(pixel, error))
+            npixel = tuple(min(255, round(color + error * debt)) for color, error in zip(pixel, error))
+            print 'errors:', error
+            print 'pos:', (off_x + 255 * off_y), " pixel/npixel:", pixel, npixel
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, off_x, off_y, nchannels, npixel)
 
         except Exception:
             pass # hey, gimp developers, Python 2.7 sucks!
+    print "===="
 
 
 def reduce_colors(image, palette, dithering=True):
@@ -217,14 +221,15 @@ def reduce_colors(image, palette, dithering=True):
     for y in range(height):
         for x in range(width):
             nchannels, (r1, g1, b1) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            r2 = r1 & 0xe0; nr = round(float(r1) / 0xff * 7)
-            g2 = g1 & 0xe0; ng = round(float(g1) / 0xff * 7)
-            b2 = b1 & 0xe0; nb = round(float(b1) / 0xff * 7)
+            nr = round(float(r1) / 0xff * 7)
+            ng = round(float(g1) / 0xff * 7)
+            nb = round(float(b1) / 0xff * 7)
+            print 'pos:', (x + 255 * y), " pixel:", (r1, g1, b1)
             index = nearest_index((nr, ng, nb))
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, palette[index][0])
 
             if dithering:
-                error = [old - new for old, new in zip((r1, g1, b1), (r2, g2, b2))]
+                error = [new - old for old, new in zip((r1, g1, b1), (nr, ng, nb))]
                 scatter_noise(drawable, x, y, error)
 
         percent += step
