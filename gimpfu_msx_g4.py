@@ -40,9 +40,7 @@ def create_distance_query(palette):
     def query_index(pixel):
         idx = palmap.get(pixel)
         if idx:
-            print "** cache hit:", pixel
             return palette[idx][1], palette[idx][0]
-        print "** cache miss:", pixel
         dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
         mdst = min(dsts, key=tuple_value)
         #print 'pixel =', pixel, ' distances =', dsts, ' min =', mdst
@@ -64,19 +62,28 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     @param exp_pal: export palette data too
     @param image_enc: output encoding
     '''
-    
+
+    filename = filename.upper()
     errors = []
+
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
 
-    if width != MAX_WIDTH:
-        errors.append('Drawable width must be %i.' % MAX_WIDTH)
+    if image_enc != 'disabled':
+        if os.path.exists(os.path.join(folder, '%s.SC5' % filename)):
+            errors.append('Output file "%s.SC5" already exists.' % filename)
 
-    if height > MAX_HEIGHT * MAX_PAGES:
-        errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
+        if os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
+            errors.append('Output palette "%s.PAL" file already exists.' % filename)
 
-    if image_enc != 'bin':
-        errors.append("RLE and aPLib encoding are not implemented yet.")
+        if width != MAX_WIDTH:
+            errors.append('Drawable width must be %i.' % MAX_WIDTH)
+
+        if height > MAX_HEIGHT * MAX_PAGES:
+            errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
+
+        if image_enc in ('RLE', 'aPLib'):
+            errors.append("RLE and aPLib encoding are not implemented yet.")
 
     if errors:
         gimp.message("\n".join(errors))
@@ -90,16 +97,14 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     drawable = reduce_colors(new_image, dithering)
     histogram = create_histogram(drawable)
     palette = quantize_colors(histogram, MAX_COLORS)
-    print "palette =", palette
     query = create_distance_query(palette)
 
-    if exp_pal:
+    if image_enc != 'disabled' and exp_pal:
         pal9bits = [0] * (2 * MAX_COLORS)
 
-        for color, index in palette:
-            r, g, b = color
-            pal9bits[index * 2] = 16 * r + b
-            pal9bits[index * 2 + 1] = g
+        for (r, g, b), index in palette:
+            pal9bits[index * 2] = 16 * (r >> 5) + (b >> 5)
+            pal9bits[index * 2 + 1] = (g >> 5)
 
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
@@ -114,27 +119,25 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     step = 1.0 / height
     percent = 0.0
 
-    for y in range(0, height):
-        for x in range(0, width):
-            _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            indexed, _ = query((r >> 5, g >> 5, b >> 5))
-            pos = x // 2 + y * 128
-            buffer[pos] |= indexed if x % 2 else indexed << 4;
-
-        percent += step
-        gimpfu.pdb.gimp_progress_update(percent)
-
-    # Discard temporary image
-    gimpfu.pdb.gimp_image_delete(new_image)
-
     if image_enc == 'bin':
-        encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
-    else:
-        return
+        for y in range(0, height):
+            for x in range(0, width):
+                _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                indexed, _ = query((r, g, b))
+                pos = x // 2 + y * 128
+                buffer[pos] |= indexed if x % 2 else indexed << 4;
 
-    file = open(os.path.join(folder, '%s.SC5' % filename), "wb")
-    file.write(encoded)
-    file.close()
+            percent += step
+            gimpfu.pdb.gimp_progress_update(percent)
+
+        encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+        file = open(os.path.join(folder, '%s.SC5' % filename), "wb")
+        file.write(encoded)
+        file.close()
+    else:
+        # Discard temporary image
+        #gimpfu.pdb.gimp_image_delete(new_image)
+        gimpfu.pdb.gimp_display_new(new_image)
 
 
 def create_histogram(drawable):
@@ -151,9 +154,6 @@ def create_histogram(drawable):
 
         for x in range(width):
             _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            r = round(float(r) / 0xff * 7)
-            g = round(float(g) / 0xff * 7)
-            b = round(float(b) / 0xff * 7)
             histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
 
         percent += step
@@ -172,6 +172,7 @@ def distance(src, dst):
 
 
 def quantize_colors(histogram, length):
+    """Group similar colours reducing palette to "length"."""
     palette = []
 
     gimpfu.pdb.gimp_progress_init('Quantizing colors...', None)
@@ -215,16 +216,15 @@ def scatter_noise(drawable, x, y, error):
 
             nchannels, pixel = gimpfu.pdb.gimp_drawable_get_pixel(drawable, off_x, off_y)
             npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
-            print 'error:', error
-            print 'pos:', (off_x + 255 * off_y), " pixel/npixel:", pixel, npixel
+            #print 'pos:', (off_x + 255 * off_y), " pixel/npixel:", pixel, npixel
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, off_x, off_y, nchannels, npixel)
 
         except Exception:
             pass # hey, gimp developers, Python 2.7 sucks!
-    print "===="
 
 
 def reduce_colors(image, dithering=True):
+    """Reduction to 9-bit palette with optional dithering."""
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
  
@@ -263,7 +263,8 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     #(gimpfu.PF_BOOL, "force-0black", "Force black as color 0", False),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
-                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("BIN", "bin"),))
+                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("BIN", "bin"),
+                        ("disabled (no output file)", "disabled")))
                 ], 
                 [], 
                 write_gr4)
