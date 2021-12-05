@@ -11,8 +11,9 @@ GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 
 
 Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You may disable **Image Encoding** altogether to create an image inside GIMP and not export it to disk at all. In this case, the plug-in doesn't check image size. But be warned: big images tend to take a very. Long. Time.
 
-## Sample image
+## Original vs sample image
 
+![Original image](images/original.jpg "Original image")
 ![Sample image](images/sample.jpg "Sample image")
 
 ## Installation: 
