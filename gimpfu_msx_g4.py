@@ -23,7 +23,7 @@ DEFAULT_OUTPUT_DIR = os.getcwd()
 DEFAULT_OUTPUT_FMT = 'bin'
 MAX_COLORS = 16
 MAX_WIDTH = 256
-MAX_HEIGHT = 212
+MAX_HEIGHT = 256
 MAX_PAGES = 4
 PALETTE_OFFSET = 0x7680
 FIXED_DITHERING = 3
@@ -32,6 +32,14 @@ PLUGIN_MSG = """Export bitmaps in MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BAS
 
 tuple_key = lambda pair: pair[0]
 tuple_value = lambda pair: pair[1]
+
+
+def has_alpha(drawable):
+    try:
+        _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, 0, 0)
+    except ValueError:
+        return False
+    return True
 
 
 def create_distance_query(palette):
@@ -120,9 +128,13 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     percent = 0.0
 
     if image_enc == 'bin':
+        alpha_channel = has_alpha(drawable)
         for y in range(0, height):
             for x in range(0, width):
-                _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                if alpha_channel:
+                    _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                else:
+                    _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
                 indexed, _ = query((r, g, b))
                 pos = x // 2 + y * 128
                 buffer[pos] |= indexed if x % 2 else indexed << 4;
@@ -149,11 +161,15 @@ def create_histogram(drawable):
 
     gimpfu.pdb.gimp_progress_init('Creating histogram...', None)
     gimpfu.pdb.gimp_progress_update(0)
+    alpha_channel = has_alpha(drawable)
 
     for y in range(height):
 
         for x in range(width):
-            _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            if alpha_channel:
+                _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            else:
+                _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
             histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
 
         percent += step
@@ -233,10 +249,14 @@ def reduce_colors(image, dithering=True):
 
     percent = 0.0
     step = 1.0 / height
+    alpha_channel = has_alpha(drawable)
 
     for y in range(height):
         for x in range(width):
-            nchannels, (r1, g1, b1) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            if alpha_channel:
+                nchannels, (r1, g1, b1, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            else:
+                nchannels, (r1, g1, b1) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
             r2 = int(round(float(r1) / 0xff * 7)) << 5
             g2 = int(round(float(g1) / 0xff * 7)) << 5
             b2 = int(round(float(b1) / 0xff * 7)) << 5
