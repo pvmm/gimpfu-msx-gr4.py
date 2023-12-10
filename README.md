@@ -17,7 +17,9 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 ![Sample image](images/sample.jpg "Sample image")
 
 ## Installation: 
-- Put this file into your GIMP plugin directory, i.e. `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimpfu_msx_g4.py`
+- Put the source file (`gimpfu_msx_g.py`) into your GIMP plugin directory:
+  - if you installed GIMP as a normal package, it's `~/.config/GIMP/2.10/plug-ins/`;
+  - if you installed GIMP as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
 - Restart GIMP
 
 ## Loading bin (.SC5) files
