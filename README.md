@@ -4,7 +4,7 @@
 
 GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 specs are: 
 
-* 256x212 (or 256x192);
+* 256x256 page with a 256x212 or 256x192 viewport;
 * 16 color palette (from 512);
 * 4 pages;
 * sprite mode 2;
@@ -41,6 +41,8 @@ First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palet
 * make it faster;
 * ~~palette export;~~
 * ~~RGB to indexed conversion;~~
+* ~~export raw file to be used by external compressors~~
+* ~~ignore alpha channel instead of triggering errors~~
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;
