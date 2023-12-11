@@ -34,14 +34,6 @@ tuple_key = lambda pair: pair[0]
 tuple_value = lambda pair: pair[1]
 
 
-def has_alpha(drawable):
-    try:
-        _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, 0, 0)
-    except ValueError:
-        return False
-    return True
-
-
 def create_distance_query(palette):
     palmap = {k:v for k, v in palette}
 
@@ -58,7 +50,7 @@ def create_distance_query(palette):
     return query_index
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
+def write_gr4(image, layer, filename, folder, dithering, exp_pal, zeroth_color, image_enc):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -68,6 +60,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     @param folder: output directory
     @param dithering: whether dithering is active
     @param exp_pal: export palette data too
+    @param zeroth_color: use zeroth colour as a valid colour
     @param image_enc: output encoding
     '''
 
@@ -113,8 +106,8 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
 
         for (r, g, b), index in palette:
             # start palette at color 1:
-            pal9bits[(index + 1) * 2] = 16 * (r >> 5) + (b >> 5)
-            pal9bits[(index + 1) * 2 + 1] = (g >> 5)
+            pal9bits[(index + zeroth_color) * 2] = 16 * (r >> 5) + (b >> 5)
+            pal9bits[(index + zeroth_color) * 2 + 1] = (g >> 5)
 
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
@@ -130,16 +123,12 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     percent = 0.0
 
     if image_enc != 'disabled':
-        alpha_channel = has_alpha(drawable)
         for y in range(0, height):
             for x in range(0, width):
-                if alpha_channel:
-                    _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                else:
-                    _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                indexed, _ = query((r, g, b))
+                _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                index, _ = query((c[0], c[1], c[2]))
                 pos = x // 2 + y * 128
-                buffer[pos] |= (indexed + 1) if x % 2 else (indexed + 1) << 4;
+                buffer[pos] |= (index + zeroth_color) if x % 2 else (index + zeroth_color) << 4;
 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
@@ -168,15 +157,11 @@ def create_histogram(drawable):
 
     gimpfu.pdb.gimp_progress_init('Creating histogram...', None)
     gimpfu.pdb.gimp_progress_update(0)
-    alpha_channel = has_alpha(drawable)
 
     for y in range(height):
         for x in range(width):
-            if alpha_channel:
-                _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            else:
-                _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
+            _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
 
         percent += step
         gimpfu.pdb.gimp_progress_update(percent)
@@ -255,21 +240,17 @@ def reduce_colors(image, dithering=True):
 
     percent = 0.0
     step = 1.0 / height
-    alpha_channel = has_alpha(drawable)
 
     for y in range(height):
         for x in range(width):
-            if alpha_channel:
-                nchannels, (r1, g1, b1, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            else:
-                nchannels, (r1, g1, b1) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            r2 = int(round(float(r1) / 0xff * 7)) << 5
-            g2 = int(round(float(g1) / 0xff * 7)) << 5
-            b2 = int(round(float(b1) / 0xff * 7)) << 5
-            gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, (r2, g2, b2))
+            nchannels, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            r = int(round(float(c[0]) / 0xff * 7)) << 5
+            g = int(round(float(c[1]) / 0xff * 7)) << 5
+            b = int(round(float(c[2]) / 0xff * 7)) << 5
+            gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, (r, g, b))
 
             if dithering:
-                error = [old - new for old, new in zip((r1, g1, b1), (r2, g2, b2))]
+                error = [old - new for old, new in zip((c[0], c[1], c[2]), (r, g, b))]
                 scatter_noise(drawable, x, y, error)
 
         percent += step
@@ -289,6 +270,7 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     #(gimpfu.PF_BOOL, "force-0black", "Force black as color 0", False),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
+                    (gimpfu.PF_BOOL, "zeroth-color", "Zeroth color", False),
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("MSX binary format", "bin"),
                         ("raw file", "raw"),
                         ("disabled (no output file)", "disabled")))
