@@ -78,8 +78,9 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
 
     if image_enc != 'disabled':
-        if os.path.exists(os.path.join(folder, '%s.SC5' % filename)):
-            errors.append('Output file "%s.SC5" already exists.' % filename)
+        suffix = '.SC5' if image_enc == 'bin' else '.RAW'
+        if os.path.exists(os.path.join(folder, '%s%s' % (filename, suffix))):
+            errors.append('Output file "%s%s" already exists.' % (filename, suffix))
 
         if os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
             errors.append('Output palette "%s.PAL" file already exists.' % filename)
@@ -144,9 +145,11 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
 
         if image_enc == 'bin':
             encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+            suffix = '.SC5'
         else:
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
-        file = open(os.path.join(folder, '%s.SC5' % filename), "wb")
+            suffix = '.RAW'
+        file = open(os.path.join(folder, '%s%s' % (filename, suffix)), 'wb')
         file.write(encoded)
         file.close()
     else:
