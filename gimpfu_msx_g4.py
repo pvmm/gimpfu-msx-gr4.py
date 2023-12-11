@@ -127,7 +127,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
     step = 1.0 / height
     percent = 0.0
 
-    if image_enc == 'bin':
+    if image_enc != 'disabled':
         alpha_channel = has_alpha(drawable)
         for y in range(0, height):
             for x in range(0, width):
@@ -142,7 +142,10 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
 
-        encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+        if image_enc == 'bin':
+            encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+        else:
+            encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
         file = open(os.path.join(folder, '%s.SC5' % filename), "wb")
         file.write(encoded)
         file.close()
@@ -283,7 +286,8 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     #(gimpfu.PF_BOOL, "force-0black", "Force black as color 0", False),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
-                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("BIN", "bin"),
+                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("MSX binary format", "bin"),
+                        ("raw file", "raw"),
                         ("disabled (no output file)", "disabled")))
                 ], 
                 [], 
