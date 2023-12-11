@@ -27,6 +27,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 You may load files created by this plug-in using this simple code in BASIC:
 ```
 10 SCREEN 5
+15 REM use line below if transparency is disabled
 20 VDP(9)=VDP(9) OR &H20
 30 BLOAD"NONAME.SC5",S
 40 BLOAD"NONAME.PAL",S
@@ -39,6 +40,7 @@ First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palet
 
 * ordered dithering;
 * make it faster;
+* ~~enable or disable transparent colour~~
 * ~~palette export;~~
 * ~~RGB to indexed conversion;~~
 * ~~export raw file to be used by external compressors~~

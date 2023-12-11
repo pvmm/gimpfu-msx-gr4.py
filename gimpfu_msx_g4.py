@@ -50,7 +50,7 @@ def create_distance_query(palette):
     return query_index
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, zeroth_color, image_enc):
+def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, image_enc):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -60,7 +60,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, zeroth_color, 
     @param folder: output directory
     @param dithering: whether dithering is active
     @param exp_pal: export palette data too
-    @param zeroth_color: use zeroth colour as a valid colour
+    @param transparency: transparency consumes one color index
     @param image_enc: output encoding
     '''
 
@@ -106,8 +106,8 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, zeroth_color, 
 
         for (r, g, b), index in palette:
             # start palette at color 1:
-            pal9bits[(index + zeroth_color) * 2] = 16 * (r >> 5) + (b >> 5)
-            pal9bits[(index + zeroth_color) * 2 + 1] = (g >> 5)
+            pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
+            pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
 
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
@@ -128,7 +128,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, zeroth_color, 
                 _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
                 index, _ = query((c[0], c[1], c[2]))
                 pos = x // 2 + y * 128
-                buffer[pos] |= (index + zeroth_color) if x % 2 else (index + zeroth_color) << 4;
+                buffer[pos] |= (index + transparency) if x % 2 else (index + transparency) << 4;
 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
@@ -270,7 +270,7 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     #(gimpfu.PF_BOOL, "force-0black", "Force black as color 0", False),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
-                    (gimpfu.PF_BOOL, "zeroth-color", "Zeroth color", False),
+                    (gimpfu.PF_BOOL, "transparency", "Enable transparency", True),
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("MSX binary format", "bin"),
                         ("raw file", "raw"),
                         ("disabled (no output file)", "disabled")))
