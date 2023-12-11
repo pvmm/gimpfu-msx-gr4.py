@@ -112,8 +112,9 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
         pal9bits = [0] * (2 * MAX_COLORS)
 
         for (r, g, b), index in palette:
-            pal9bits[index * 2] = 16 * (r >> 5) + (b >> 5)
-            pal9bits[index * 2 + 1] = (g >> 5)
+            # start palette at color 1:
+            pal9bits[(index + 1) * 2] = 16 * (r >> 5) + (b >> 5)
+            pal9bits[(index + 1) * 2 + 1] = (g >> 5)
 
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
@@ -138,7 +139,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, image_enc):
                     _, (r, g, b) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
                 indexed, _ = query((r, g, b))
                 pos = x // 2 + y * 128
-                buffer[pos] |= indexed if x % 2 else indexed << 4;
+                buffer[pos] |= (indexed + 1) if x % 2 else (indexed + 1) << 4;
 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
@@ -170,7 +171,6 @@ def create_histogram(drawable):
     alpha_channel = has_alpha(drawable)
 
     for y in range(height):
-
         for x in range(width):
             if alpha_channel:
                 _, (r, g, b, a) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
