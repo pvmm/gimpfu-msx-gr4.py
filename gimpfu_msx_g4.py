@@ -75,7 +75,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         if os.path.exists(os.path.join(folder, '%s%s' % (filename, suffix))):
             errors.append('Output file "%s%s" already exists.' % (filename, suffix))
 
-        if os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
+        if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
             errors.append('Output palette "%s.PAL" file already exists.' % filename)
 
         if width != MAX_WIDTH:
@@ -85,7 +85,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
             errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
 
         if image_enc in ('RLE', 'aPLib'):
-            errors.append("RLE and aPLib encoding are not implemented yet.")
+            errors.append("compression is not implemented yet.")
 
     if errors:
         gimp.message("\n".join(errors))
@@ -262,13 +262,12 @@ def reduce_colors(image, dithering=True):
 gimpfu.register("msx_gr4_exporter",
                 PLUGIN_MSG,
                 "Export MSX-compatible image", 
-                "Pedro de Medeiros", "Pedro de Medeiros", "2021", 
+                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2023", 
                 "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...", 
                 "RGB*", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
-                    #(gimpfu.PF_BOOL, "force-0black", "Force black as color 0", False),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
                     (gimpfu.PF_BOOL, "transparency", "Enable transparency", True),
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("MSX binary format", "bin"),
