@@ -13,7 +13,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 
 ## Original vs sample image
 
-As usual, here is a picture of a nice girl for comparison:
+### As usual, here is a picture of a nice girl for comparison:
 ![Original image](images/original.jpg "Original image")
 ![Sample image](images/sample.jpg "Sample image")
 
