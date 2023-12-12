@@ -4,9 +4,9 @@
 
 GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 specs are: 
 
-* 256x256 page with a 256x212 or 256x192 viewport;
-* 16 color palette (from 512);
 * 4 pages;
+* 256x1024 image (256 per page) with a 256x212 or 256x192 viewport;
+* 16 color palette (from 512);
 * sprite mode 2;
 
 Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You may disable **Image Encoding** altogether to create an image inside GIMP and not export it to disk at all. In this case, the plug-in doesn't check image size. But be warned: big images tend to take a very. Long. Time.
@@ -31,11 +31,24 @@ You may load files created by this plug-in using this simple code in BASIC:
 15 REM use line below if transparency is disabled
 20 VDP(9)=VDP(9) OR &H20
 30 BLOAD"NONAME.SC5",S
-40 BLOAD"NONAME.PAL",S
 50 COLOR=RESTORE
 60 IF INKEY$ = "" GOTO 60
 ```
-First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palette.
+File (NONAME.SC5) contains the pattern and palette data. If height is 237 pixels or more, the palette data will overwrite the pattern data. It's recommended to use SR5 with a separate palette file in this case.
+
+## Loading binary (.SR5) files
+
+You may load files created by this plug-in using this simple code in BASIC:
+```
+10 SCREEN 5
+15 REM use line below if transparency is disabled
+20 VDP(9)=VDP(9) OR &H20
+40 BLOAD"NONAME.PAL",S
+50 COLOR=RESTORE
+30 BLOAD"NONAME.SR5",S
+60 IF INKEY$ = "" GOTO 60
+```
+Second file (NONAME.SR5) is the pattern data and first file (NONAME.PAL) is the palette.
 
 ## TODO
 
@@ -46,6 +59,7 @@ First file (NONAME.SC5) is the pattern data and second (NONAME.PAL) is the palet
 * ~~RGB to indexed conversion;~~
 * ~~export raw file to be used by external compressors~~
 * ~~ignore alpha channel instead of triggering errors~~
+* ~~embedded palette support~~
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;
