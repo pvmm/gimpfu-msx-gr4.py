@@ -74,11 +74,11 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         if os.path.exists(os.path.join(folder, '%s.%s' % (filename, image_enc))):
             errors.append('Output file "%s.%s" already exists.' % (filename, image_enc))
 
+        if width != MAX_WIDTH:
+            errors.append('Drawable width must be %i.' % MAX_WIDTH)
+
     if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
         errors.append('Output palette "%s.PAL" file already exists.' % filename)
-
-    if width != MAX_WIDTH:
-        errors.append('Drawable width must be %i.' % MAX_WIDTH)
 
     if height > MAX_HEIGHT * MAX_PAGES:
         errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
