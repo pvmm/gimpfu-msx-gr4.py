@@ -13,7 +13,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 
 ## Original vs sample image
 
-### As usual, here is a picture of a nice girl for comparison:
+#### As usual, here is a picture of a good girl for comparison:
 ![Original image](images/original.jpg "Original image")
 ![Sample image](images/sample.jpg "Sample image")
 
@@ -23,32 +23,46 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
   - if you installed GIMP as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
 - Restart GIMP
 
-## Loading binary SC5 files
+## Loading SC5 files
 
 You may load files created by this plug-in using this simple code in BASIC:
 ```
 10 SCREEN 5
-15 REM use line below if transparency is disabled
-20 VDP(9)=VDP(9) OR &H20
-30 BLOAD"NONAME.SC5",S
+20 REM use line below if transparency is disabled
+30 VDP(9)=VDP(9) OR &H20
+40 BLOAD"NONAME.SC5",S
 50 COLOR=RESTORE
 60 IF INKEY$ = "" GOTO 60
 ```
 File (NONAME.SC5) contains the pattern and palette data. If image height is 237 pixels or more, the palette data will overwrite the pattern data. It's recommended to use SR5 with a separate palette file in this case.
 
-## Loading binary SR5 files
+## Loading SR5 files
 
 Loading SR5 files is just a little different in BASIC:
 ```
 10 SCREEN 5
-15 REM use line below if transparency is disabled
-20 VDP(9)=VDP(9) OR &H20
+20 REM use line below if transparency is disabled
+30 VDP(9)=VDP(9) OR &H20
 40 BLOAD"NONAME.PAL",S
 50 COLOR=RESTORE
-30 BLOAD"NONAME.SR5",S
-60 IF INKEY$ = "" GOTO 60
+60 BLOAD"NONAME.SR5",S
+70 IF INKEY$ = "" GOTO 70
 ```
 The first file (NONAME.PAL) is the palette and the second file (NONAME.SR5) is the pattern data and you need both to get the right image.
+
+## Loading DAT files
+
+DAT (DATA) files are copies of portions of the screen dumped to a disk file. They are created by MSX-BASIC COPY command. Loading DAT files in BASIC is easy:
+```
+10 SCREEN 5
+20 REM use line below if transparency is disabled
+30 VDP(9)=VDP(9) OR &H20
+40 BLOAD"NONAME.PAL",S
+50 COLOR=RESTORE
+60 COPY "NONAME.DAT" TO (0,0), 0
+70 IF INKEY$ = "" GOTO 70
+```
+A palette file (NONAME.PAL) is still recommended to restore the image properly.
 
 ## TODO
 
@@ -60,7 +74,7 @@ The first file (NONAME.PAL) is the palette and the second file (NONAME.SR5) is t
 * ~~export raw file to be used by external compressors;~~
 * ~~ignore alpha channel instead of triggering errors;~~
 * ~~embedded palette support;~~
-* MSX-BASIC COPY to disk format support;
+* ~~MSX-BASIC COPY to disk format support;~~
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;

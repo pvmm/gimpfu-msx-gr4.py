@@ -140,6 +140,8 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
 
         if image_enc == 'RAW':
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
+        elif image_enc == 'DAT':
+            encoded = struct.pack('<HH{}B'.format(len(buffer)), width, height, *buffer)
         else:
             encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
         file = open(os.path.join(folder, '%s.%s' % (filename, image_enc)), 'wb')
@@ -276,6 +278,7 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT,
                        (("Binary format with palette (SC5)", "SC5"),
                         ("Binary format without palette (SR5)", "SR5"),
+                        ("MSX-BASIC COPY to disk (no palette)", "DAT"),
                         ("Raw file (no palette)", "RAW"),
                         ("No output (image in new window)", "no-output")))
                 ], 
