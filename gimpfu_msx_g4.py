@@ -20,7 +20,7 @@ BIN_PREFIX = 0xFE
 DEFAULT_FILENAME = 'NONAME'
 DEFAULT_VRES = 'v212'
 DEFAULT_OUTPUT_DIR = os.getcwd()
-DEFAULT_OUTPUT_FMT = 'bin'
+DEFAULT_OUTPUT_FMT = 'SC5'
 MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 256
@@ -70,10 +70,9 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
 
-    if image_enc != 'disabled':
-        suffix = '.SC5' if image_enc == 'bin' else '.RAW'
-        if os.path.exists(os.path.join(folder, '%s%s' % (filename, suffix))):
-            errors.append('Output file "%s%s" already exists.' % (filename, suffix))
+    if image_enc != 'no-output':
+        if os.path.exists(os.path.join(folder, '%s.%s' % (filename, image_enc))):
+            errors.append('Output file "%s.%s" already exists.' % (filename, image_enc))
 
         if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
             errors.append('Output palette "%s.PAL" file already exists.' % filename)
@@ -101,14 +100,15 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     palette = quantize_colors(histogram, MAX_COLORS)
     query = create_distance_query(palette)
 
-    if image_enc != 'disabled' and exp_pal:
-        pal9bits = [0] * (2 * MAX_COLORS)
+    # create palette data
+    pal9bits = [0] * (2 * MAX_COLORS)
 
-        for (r, g, b), index in palette:
-            # start palette at color 1:
-            pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
-            pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
+    for (r, g, b), index in palette:
+        # start palette at color 1:
+        pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
+        pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
 
+    if exp_pal:
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
         file = open(os.path.join(folder, '%s.PAL' % filename), "wb")
@@ -122,7 +122,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     step = 1.0 / height
     percent = 0.0
 
-    if image_enc != 'disabled':
+    if image_enc != 'no-output':
         for y in range(0, height):
             for x in range(0, width):
                 _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
@@ -133,13 +133,16 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
 
-        if image_enc == 'bin':
-            encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
-            suffix = '.SC5'
-        else:
+        # Embed palette to image (SC5 only)
+        if image_enc == 'SC5':
+            for pos in range(32):
+                buffer[0x7680 + pos] = pal9bits[pos]
+
+        if image_enc == 'RAW':
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
-            suffix = '.RAW'
-        file = open(os.path.join(folder, '%s%s' % (filename, suffix)), 'wb')
+        else:
+            encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+        file = open(os.path.join(folder, '%s.%s' % (filename, image_enc)), 'wb')
         file.write(encoded)
         file.close()
     else:
@@ -268,11 +271,13 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
-                    (gimpfu.PF_BOOL, "exp-pal", "Export palette", True),
+                    (gimpfu.PF_BOOL, "exp-pal", "Export palette", False),
                     (gimpfu.PF_BOOL, "transparency", "Enable transparency", True),
-                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT, (("MSX binary format", "bin"),
-                        ("raw file", "raw"),
-                        ("disabled (no output file)", "disabled")))
+                    (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT,
+                       (("Binary format with palette (SC5)", "SC5"),
+                        ("Binary format without palette (SR5)", "SR5"),
+                        ("Raw file (no palette)", "RAW"),
+                        ("No output (dry run)", "no-output")))
                 ], 
                 [], 
                 write_gr4)
