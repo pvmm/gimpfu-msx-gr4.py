@@ -23,7 +23,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
   - if you installed GIMP as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
 - Restart GIMP
 
-## Loading binary (.SC5) files
+## Loading binary SC5 files
 
 You may load files created by this plug-in using this simple code in BASIC:
 ```
@@ -34,11 +34,11 @@ You may load files created by this plug-in using this simple code in BASIC:
 50 COLOR=RESTORE
 60 IF INKEY$ = "" GOTO 60
 ```
-File (NONAME.SC5) contains the pattern and palette data. If height is 237 pixels or more, the palette data will overwrite the pattern data. It's recommended to use SR5 with a separate palette file in this case.
+File (NONAME.SC5) contains the pattern and palette data. If image height is 237 pixels or more, the palette data will overwrite the pattern data. It's recommended to use SR5 with a separate palette file in this case.
 
-## Loading binary (.SR5) files
+## Loading binary SR5 files
 
-You may load files created by this plug-in using this simple code in BASIC:
+Loading SR5 files is just a little different in BASIC:
 ```
 10 SCREEN 5
 15 REM use line below if transparency is disabled
@@ -48,7 +48,7 @@ You may load files created by this plug-in using this simple code in BASIC:
 30 BLOAD"NONAME.SR5",S
 60 IF INKEY$ = "" GOTO 60
 ```
-Second file (NONAME.SR5) is the pattern data and first file (NONAME.PAL) is the palette.
+The first file (NONAME.PAL) is the palette and the second file (NONAME.SR5) is the pattern data and you need both to get the right image.
 
 ## TODO
 
