@@ -253,7 +253,7 @@ def downsampling(image, dithering=True):
     # Only even sizes are permitted.
     width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
  
-    gimpfu.pdb.gimp_progress_init('Downsampling%s...' % (' with dithering (slow!)' if dithering else '', None)
+    gimpfu.pdb.gimp_progress_init('Downsampling%s...' % (' with dithering (slow!)' if dithering else ''), None)
     gimpfu.pdb.gimp_progress_update(0.0)
 
     percent = 0.0
