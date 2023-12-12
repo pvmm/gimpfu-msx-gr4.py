@@ -74,17 +74,17 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         if os.path.exists(os.path.join(folder, '%s.%s' % (filename, image_enc))):
             errors.append('Output file "%s.%s" already exists.' % (filename, image_enc))
 
-        if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
-            errors.append('Output palette "%s.PAL" file already exists.' % filename)
+    if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
+        errors.append('Output palette "%s.PAL" file already exists.' % filename)
 
-        if width != MAX_WIDTH:
-            errors.append('Drawable width must be %i.' % MAX_WIDTH)
+    if width != MAX_WIDTH:
+        errors.append('Drawable width must be %i.' % MAX_WIDTH)
 
-        if height > MAX_HEIGHT * MAX_PAGES:
-            errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
+    if height > MAX_HEIGHT * MAX_PAGES:
+        errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
 
-        if image_enc in ('RLE', 'aPLib'):
-            errors.append("compression is not implemented yet.")
+    if image_enc in ('RLE', 'aPLib'):
+        errors.append("compression is not implemented yet.")
 
     if errors:
         gimp.message("\n".join(errors))
@@ -277,7 +277,7 @@ gimpfu.register("msx_gr4_exporter",
                        (("Binary format with palette (SC5)", "SC5"),
                         ("Binary format without palette (SR5)", "SR5"),
                         ("Raw file (no palette)", "RAW"),
-                        ("No output (dry run)", "no-output")))
+                        ("No output (image in new window)", "no-output")))
                 ], 
                 [], 
                 write_gr4)
