@@ -67,7 +67,7 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 ## TODO
 
 * ordered dithering;
-* make it faster;
+* make it faster (dithering is very slow and stupidly unoptimsed);
 * ~~enable or disable transparent colour~~
 * ~~palette export;~~
 * ~~RGB to indexed conversion;~~

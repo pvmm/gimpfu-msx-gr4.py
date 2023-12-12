@@ -101,9 +101,9 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     # Create temporary image
     new_image = gimpfu.pdb.gimp_image_duplicate(image)
 
-    drawable = reduce_colors(new_image, dithering)
+    drawable = downsampling(new_image, dithering)
     histogram = create_histogram(drawable)
-    palette = quantize_colors(histogram, MAX_COLORS)
+    palette = quantize_colors(histogram, MAX_COLORS - transparency)
     query = create_distance_query(palette)
 
     # create palette data
@@ -205,16 +205,17 @@ def quantize_colors(histogram, length):
     step = float(len(histogram) - length) / 100
 
     while len(histogram) > length:
-        # Order by number of pixels of the same color
+        # Order histogram by color usage (this is slooooooow!)
         histogram.sort(key=tuple_value)
 
+        # Get least frequent item and its nearest cousin by colour
         color1, freq = histogram.pop(0)
         distances = [
             (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(histogram[1:], start=1)
         ]
-
         index, _ = min(distances, key=tuple_value)
-        # add first least frequent item into nearest element
+
+        # add removed item's frequency into nearest cousin's frequency
         histogram[index] = (histogram[index][0], histogram[index][1] + freq)
 
         percent += step
@@ -246,13 +247,13 @@ def scatter_noise(drawable, x, y, error):
             pass # hey, gimp developers, Python 2.7 sucks!
 
 
-def reduce_colors(image, dithering=True):
+def downsampling(image, dithering=True):
     """Reduction to 9-bit palette with optional dithering."""
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     # Only even sizes are permitted.
     width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
  
-    gimpfu.pdb.gimp_progress_init('Downsampling...', None)
+    gimpfu.pdb.gimp_progress_init('Downsampling%s...' % (' with dithering (slow!)' if dithering else '', None)
     gimpfu.pdb.gimp_progress_update(0.0)
 
     percent = 0.0
