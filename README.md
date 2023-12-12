@@ -57,9 +57,11 @@ The first file (NONAME.PAL) is the palette and the second file (NONAME.SR5) is t
 * ~~enable or disable transparent colour~~
 * ~~palette export;~~
 * ~~RGB to indexed conversion;~~
-* ~~export raw file to be used by external compressors~~
-* ~~ignore alpha channel instead of triggering errors~~
-* ~~embedded palette support~~
+* ~~export raw file to be used by external compressors;~~
+* ~~ignore alpha channel instead of triggering errors;~~
+* ~~embedded palette support;~~
+* MSX-BASIC COPY to disk format support;
 * RLE encoding;
 * aPLib compression;
 * converting layers into pages;
+
