@@ -52,7 +52,7 @@ The first file (NONAME.PAL) is the palette and the second file (NONAME.SR5) is t
 
 ## Loading DAT files
 
-DAT (DATA) files are copies of portions of the screen dumped to a disk file. They are created by MSX-BASIC COPY command. Loading DAT files in BASIC is easy:
+DAT (DATA) files are copies of portions of the screen dumped to a disk file. They are created by MSX-BASIC COPY command and are limited to a maximum of 212 pixels height. Loading DAT files in BASIC is easy:
 ```
 10 SCREEN 5
 20 REM use line below if transparency is disabled

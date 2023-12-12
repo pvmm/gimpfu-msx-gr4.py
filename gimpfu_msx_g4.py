@@ -24,6 +24,7 @@ DEFAULT_OUTPUT_FMT = 'SC5'
 MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 256
+MAX_DAT_HEIGHT = 212
 MAX_PAGES = 4
 PALETTE_OFFSET = 0x7680
 FIXED_DITHERING = 3
@@ -68,13 +69,20 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     errors = []
 
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
-    width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
+    # Only even sizes are permitted.
+    width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
 
     if image_enc != 'no-output':
         if os.path.exists(os.path.join(folder, '%s.%s' % (filename, image_enc))):
             errors.append('Output file "%s.%s" already exists.' % (filename, image_enc))
 
-        if width != MAX_WIDTH:
+        if image_enc == 'DAT':
+            if width > MAX_WIDTH:
+                errors.append('Drawable width must be less than or equal to %i.' % MAX_WIDTH)
+            if height > MAX_DAT_HEIGHT:
+                errors.append('Drawable height must be less than or equal to %i.' % MAX_DAT_HEIGHT)
+
+        elif width != MAX_WIDTH:
             errors.append('Drawable width must be %i.' % MAX_WIDTH)
 
     if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
@@ -89,8 +97,6 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     if errors:
         gimp.message("\n".join(errors))
         return
-
-    buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
 
     # Create temporary image
     new_image = gimpfu.pdb.gimp_image_duplicate(image)
@@ -118,7 +124,12 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     gimpfu.pdb.gimp_progress_init('Exporting image to %s format...' % image_enc, None)
     gimpfu.pdb.gimp_progress_update(0)
 
-    buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
+    # buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
+    if image_enc == 'DAT':
+        buffer = [0] * (width // 2) * height
+    else:
+        buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
+
     step = 1.0 / height
     percent = 0.0
 
@@ -127,13 +138,13 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
             for x in range(0, width):
                 _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
                 index, _ = query((c[0], c[1], c[2]))
-                pos = x // 2 + y * 128
+                pos = x // 2 + y * (width // 2)
                 buffer[pos] |= (index + transparency) if x % 2 else (index + transparency) << 4;
 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
 
-        # Embed palette to image (SC5 only)
+        # Embed palette into image data (SC5 only)
         if image_enc == 'SC5':
             for pos in range(32):
                 buffer[0x7680 + pos] = pal9bits[pos]
@@ -141,7 +152,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         if image_enc == 'RAW':
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
         elif image_enc == 'DAT':
-            encoded = struct.pack('<HH{}B'.format(len(buffer)), width, height, *buffer)
+            encoded = struct.pack('<HH{}B'.format(width * height // 2), width, height, *buffer)
         else:
             encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
         file = open(os.path.join(folder, '%s.%s' % (filename, image_enc)), 'wb')
@@ -238,7 +249,8 @@ def scatter_noise(drawable, x, y, error):
 def reduce_colors(image, dithering=True):
     """Reduction to 9-bit palette with optional dithering."""
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
-    width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
+    # Only even sizes are permitted.
+    width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
  
     gimpfu.pdb.gimp_progress_init('Downsampling...', None)
     gimpfu.pdb.gimp_progress_update(0.0)
