@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 '''
 Created on 2021/11/30
 
@@ -51,7 +51,7 @@ def create_distance_query(palette):
     return query_index
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, image_enc):
+def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, image_enc, exp_ptp):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -63,6 +63,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     @param exp_pal: export palette data too
     @param transparency: transparency consumes one color index
     @param image_enc: output encoding
+    @param exp_ptp: export plain-text-palette data too
     '''
 
     filename = filename.upper()
@@ -88,6 +89,9 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
         errors.append('Output palette "%s.PAL" file already exists.' % filename)
 
+    if exp_ptp and os.path.exists(os.path.join(folder, '%s.TXT' % filename)):
+        errors.append('Output plain text palette "%s.TXT" file already exists.' % filename)
+
     if height > MAX_HEIGHT * MAX_PAGES:
         errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
 
@@ -107,17 +111,28 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     query = create_distance_query(palette)
 
     # create palette data
-    pal9bits = [0] * (2 * MAX_COLORS)
+    pal9bits = [0] * 2 * MAX_COLORS
+    txtpal = [(0, 0, 0)] * MAX_COLORS
 
     for (r, g, b), index in palette:
         # start palette at color 1:
         pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
         pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
+        txtpal[(index + transparency)] = (r >> 5, g >> 5, b >> 5)
+
+    if exp_ptp:
+        file = open(os.path.join(folder, '%s.TXT' % filename), 'wt')
+        print >>file, 'SCREEN 5 palette:'
+        i = 0
+        for (r, g, b) in txtpal:
+            print >>file, '%i: %i, %i, %i' % (i, r, g, b)
+            i += 1
+        file.close()
 
     if exp_pal:
         encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
                 PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
-        file = open(os.path.join(folder, '%s.PAL' % filename), "wb")
+        file = open(os.path.join(folder, '%s.PAL' % filename), 'wb')
         file.write(encoded)
         file.close()
 
@@ -293,7 +308,8 @@ gimpfu.register("msx_gr4_exporter",
                         ("Binary format without palette (SR5)", "SR5"),
                         ("MSX-BASIC COPY to disk (no palette)", "DAT"),
                         ("Raw file (no palette)", "RAW"),
-                        ("No output (image in new window)", "no-output")))
+                        ("No output (image in new window)", "no-output"))),
+                    (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
                 ], 
                 [], 
                 write_gr4)
