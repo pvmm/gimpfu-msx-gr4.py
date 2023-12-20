@@ -117,7 +117,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     if type_ == INDEXED:
         num_bytes, colormap = gimpfu.pdb.gimp_image_get_colormap(new_image)
         # Convert to RGB to reduce color count. Old palette is discarded.
-        if num_bytes // 3 > MAX_COLORS:
+        if num_bytes // 3 > MAX_COLORS or dithering:
             type_ = RGB
             gimpfu.pdb.gimp_image_convert_rgb(new_image);
         else:
