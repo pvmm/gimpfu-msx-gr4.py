@@ -112,22 +112,35 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     new_image = gimpfu.pdb.gimp_image_duplicate(image)
 
     # Check if image is indexed and convert to RGB.
+    palette = []
     type_ = gimpfu.pdb.gimp_image_base_type(new_image);
     if type_ == INDEXED:
+        num_bytes, colormap = gimpfu.pdb.gimp_image_get_colormap(new_image)
+        # Convert to RGB to reduce color count. Old palette is discarded.
+        if num_bytes // 3 > MAX_COLORS:
+            type_ = RGB
+            gimpfu.pdb.gimp_image_convert_rgb(new_image);
+        else:
+            # Convert colormap into palette.
+            transparency = 0
+            for i, j in enumerate(range(0, num_bytes, 3)):
+                palette.append(((colormap[j], colormap[j + 1], colormap[j + 2]), i))
+    elif type_ == GRAY:
+        type_ = RGB
         gimpfu.pdb.gimp_image_convert_rgb(new_image);
-
-    #drawable = gimpfu.pdb.gimp_image_active_drawable(new_image)
-    drawable = downsampling(new_image, dithering)
-    histogram = create_histogram(drawable)
-    palette = quantize_colors(histogram, MAX_COLORS - transparency)
-    query = create_distance_query(palette)
 
     # create palette data
     pal9bits = [0] * 2 * MAX_COLORS
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
+    if not palette:
+        drawable = downsampling(new_image, dithering)
+        histogram = create_histogram(drawable)
+        palette = quantize_colors(histogram, MAX_COLORS - transparency)
+        query = create_distance_query(palette)
+
     for (r, g, b), index in palette:
-        # start palette at color 1:
+        # Start palette at color 1 if transparency is set.
         pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
         pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
         txtpal[(index + transparency)] = (r >> 5, g >> 5, b >> 5)
@@ -163,8 +176,13 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     if image_enc != 'no-output':
         for y in range(0, height):
             for x in range(0, width):
-                _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                index, _ = query((c[0], c[1], c[2]))
+                if type_ == RGB:
+                    # num_channels, RGBA
+                    _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                    index, _ = query((c[0], c[1], c[2]))
+                else:
+                    # num_channels, index, alpha
+                    _, (index, _) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
                 pos = x // 2 + y * (width // 2)
                 buffer[pos] |= (index + transparency) if x % 2 else (index + transparency) << 4;
 
