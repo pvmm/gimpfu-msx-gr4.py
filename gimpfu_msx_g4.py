@@ -29,6 +29,11 @@ MAX_PAGES = 4
 PALETTE_OFFSET = 0x7680
 FIXED_DITHERING = 3
 
+# Base image type
+RGB = 0
+GRAY = 1
+INDEXED = 2
+
 PLUGIN_MSG = """Export bitmaps in MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)"""
 
 tuple_key = lambda pair: pair[0]
@@ -70,7 +75,8 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     errors = []
 
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
-    # Only even sizes are permitted.
+
+    # In screen 5 only even sizes are permitted.
     width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
 
     if image_enc != 'no-output':
@@ -105,6 +111,12 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     # Create temporary image
     new_image = gimpfu.pdb.gimp_image_duplicate(image)
 
+    # Check if image is indexed and convert to RGB.
+    type_ = gimpfu.pdb.gimp_image_base_type(new_image);
+    if type_ == INDEXED:
+        gimpfu.pdb.gimp_image_convert_rgb(new_image);
+
+    #drawable = gimpfu.pdb.gimp_image_active_drawable(new_image)
     drawable = downsampling(new_image, dithering)
     histogram = create_histogram(drawable)
     palette = quantize_colors(histogram, MAX_COLORS - transparency)
@@ -174,8 +186,6 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         file.write(encoded)
         file.close()
     else:
-        # Discard temporary image
-        #gimpfu.pdb.gimp_image_delete(new_image)
         gimpfu.pdb.gimp_display_new(new_image)
 
 
@@ -297,7 +307,7 @@ gimpfu.register("msx_gr4_exporter",
                 "Export MSX-compatible image", 
                 "Pedro de Medeiros", "Pedro de Medeiros", "2021-2023", 
                 "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...", 
-                "RGB*", [
+                "*", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
