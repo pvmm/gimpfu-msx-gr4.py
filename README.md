@@ -68,16 +68,16 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 
 ## TODO
 
-* ordered dithering;
-* make it faster (dithering is very slow and stupidly unoptimised);
-* ~~enable or disable transparent colour~~
-* ~~palette export;~~
-* ~~RGB to indexed conversion;~~
-* ~~export raw file to be used by external compressors;~~
-* ~~ignore alpha channel instead of triggering errors;~~
-* ~~embedded palette support;~~
-* ~~MSX-BASIC COPY to disk format support;~~
-* RLE encoding;
-* aPLib compression;
-* converting layers into pages;
+* [ ] ordered dithering;
+* [ ] make it faster (dithering is very slow and stupidly unoptimised);
+* [x] enable or disable transparent colour;
+* [x] palette export;
+* [x] RGB to indexed conversion;
+* [x] export raw file to be used by external compressors;
+* [x] ignore alpha channel instead of triggering errors;
+* [x] embedded palette support;
+* [x] MSX-BASIC COPY to disk format support;
+* [ ] RLE encoding;
+* [ ] aPLib compression;
+* [ ] converting layers into pages;
 
