@@ -1,6 +1,6 @@
 # gimpfu-msx-gr4.py
 
-![Options dialog](images/dialog.png "Options dialog"){width=652px height=698px}
+![Options dialog](images/dialog.png "Options dialog" =652x698)
 
 GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 specs are: 
 
