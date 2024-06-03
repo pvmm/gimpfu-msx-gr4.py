@@ -56,7 +56,7 @@ def create_distance_query(palette):
     return query_index
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, image_enc, exp_ptp):
+def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, transparency, image_enc, exp_ptp):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -66,10 +66,17 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     @param folder: output directory
     @param dithering: whether dithering is active
     @param exp_pal: export palette data too
-    @param transparency: transparency consumes one color index
+    @param trans_color: RGB components of input color to be considered transparent
+    @param transparency: transparency support consumes color index 0
     @param image_enc: output encoding
     @param exp_ptp: export plain-text-palette data too
     '''
+
+    if transparency:
+        # RGBA to RGB
+        trans_color = trans_color[0:3]
+    else:
+        trans_color = False
 
     filename = filename.upper()
     errors = []
@@ -113,18 +120,29 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
 
     # Check if image is indexed and convert to RGB.
     palette = []
+    max_colors = MAX_COLORS - transparency
     type_ = gimpfu.pdb.gimp_image_base_type(new_image);
     if type_ == INDEXED:
         num_bytes, colormap = gimpfu.pdb.gimp_image_get_colormap(new_image)
+        if transparency:
+            # Find transparent color in colormap
+            color = 0
+            trans_count = 0
+            for i in range(0, num_bytes, 3):
+                if (colormap[i], colormap[i + 1], colormap[i + 2]) == trans_color:
+                    trans_count += 1
+                else:
+                    palette.append(((colormap[i], colormap[i + 1], colormap[i + 2]), color))
+                    color += 1
+            if trans_count > 1:
+                # Is this possible?
+                gimp.message("More than one transparent color detected.")
+                return
         # Convert to RGB to reduce color count. Old palette is discarded.
-        if num_bytes // 3 > MAX_COLORS or dithering:
+        if num_bytes // 3 > max_colors or dithering:
             type_ = RGB
+            palette = []
             gimpfu.pdb.gimp_image_convert_rgb(new_image);
-        else:
-            # Convert colormap into palette.
-            transparency = 0
-            for i, j in enumerate(range(0, num_bytes, 3)):
-                palette.append(((colormap[j], colormap[j + 1], colormap[j + 2]), i))
     elif type_ == GRAY:
         type_ = RGB
         gimpfu.pdb.gimp_image_convert_rgb(new_image);
@@ -134,16 +152,19 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
     if not palette:
-        drawable = downsampling(new_image, dithering)
-        histogram = create_histogram(drawable)
-        palette = quantize_colors(histogram, MAX_COLORS - transparency)
+        # disable dithering when transparency is used
+        use_transparency = check_transparency(new_image, trans_color)
+        drawable = downsampling(new_image, trans_color, dithering)
+        histogram = create_histogram(drawable, trans_color)
+        palette = quantize_colors(histogram, max_colors)
         query = create_distance_query(palette)
 
     for (r, g, b), index in palette:
         # Start palette at color 1 if transparency is set.
-        pal9bits[(index + transparency) * 2] = 16 * (r >> 5) + (b >> 5)
-        pal9bits[(index + transparency) * 2 + 1] = (g >> 5)
-        txtpal[(index + transparency)] = (r >> 5, g >> 5, b >> 5)
+        i = index + transparency
+        pal9bits[i * 2] = 16 * (r >> 5) + (b >> 5)
+        pal9bits[i * 2 + 1] = (g >> 5)
+        txtpal[i] = (r >> 5, g >> 5, b >> 5)
 
     if exp_ptp:
         file = open(os.path.join(folder, '%s.TXT' % filename), 'wt')
@@ -179,12 +200,18 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
                 if type_ == RGB:
                     # num_channels, RGBA
                     _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                    index, _ = query((c[0], c[1], c[2]))
+                    if transparency and c == trans_color:
+                        # index of transparent color is always 0
+                        index = 0
+                    else:
+                        index, _ = query((c[0], c[1], c[2]))
+                        index += transparency
                 else:
                     # num_channels, index, alpha
                     _, (index, _) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                    index += transparency
                 pos = x // 2 + y * (width // 2)
-                buffer[pos] |= (index + transparency) if x % 2 else (index + transparency) << 4;
+                buffer[pos] |= index if x % 2 else index << 4;
 
             percent += step
             gimpfu.pdb.gimp_progress_update(percent)
@@ -207,7 +234,23 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, transparency, 
         gimpfu.pdb.gimp_display_new(new_image)
 
 
-def create_histogram(drawable):
+def check_transparency(image, trans_color = False):
+    if trans_color == False:
+        return False
+
+    drawable = gimpfu.pdb.gimp_image_active_drawable(image)
+    # Only even sizes are permitted.
+    width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
+
+    for y in range(height):
+        for x in range(width):
+            _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            if trans_color and (c[0], c[1], c[2]) == trans_color:
+                return True
+    return False
+
+
+def create_histogram(drawable, trans_color = False):
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
     histogram = {}
 
@@ -220,6 +263,9 @@ def create_histogram(drawable):
     for y in range(height):
         for x in range(width):
             _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+            # Ignore transparent color
+            if trans_color and (c[0], c[1], c[2]) == trans_color:
+                continue
             histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
 
         percent += step
@@ -290,12 +336,14 @@ def scatter_noise(drawable, x, y, error):
             pass # hey, gimp developers, Python 2.7 sucks!
 
 
-def downsampling(image, dithering=True):
+def downsampling(image, trans_color=False, dithering=True):
     """Reduction to 9-bit palette with optional dithering."""
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     # Only even sizes are permitted.
     width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
  
+    # Disable dithering if transparent color is used
+    dithering = not trans_color and dithering
     gimpfu.pdb.gimp_progress_init('Downsampling%s...' % (' with dithering (slow!)' if dithering else ''), None)
     gimpfu.pdb.gimp_progress_update(0.0)
 
@@ -305,9 +353,12 @@ def downsampling(image, dithering=True):
     for y in range(height):
         for x in range(width):
             nchannels, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-            r = int(round(float(c[0]) / 0xff * 7)) << 5
-            g = int(round(float(c[1]) / 0xff * 7)) << 5
-            b = int(round(float(c[2]) / 0xff * 7)) << 5
+            if not(trans_color and (c[0], c[1], c[2]) == trans_color):
+                r = int(round(float(c[0]) / 0xff * 7)) << 5
+                g = int(round(float(c[1]) / 0xff * 7)) << 5
+                b = int(round(float(c[2]) / 0xff * 7)) << 5
+            else:
+                r, g, b = trans_color
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, x, y, nchannels, (r, g, b))
 
             if dithering:
@@ -330,7 +381,8 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", False),
-                    (gimpfu.PF_BOOL, "transparency", "Enable transparency", True),
+                    (gimpfu.PF_COLOR, "trans_color", "Input transparent color", (0xff, 0x0, 0xff)),
+                    (gimpfu.PF_BOOL, "transparency", "Reserve index 0 as transparency", True),
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT,
                        (("Binary format with palette (SC5)", "SC5"),
                         ("Binary format without palette (SR5)", "SR5"),

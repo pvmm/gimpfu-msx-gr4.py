@@ -11,6 +11,10 @@ GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 
 
 Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You may disable **Image Encoding** altogether to create an image inside GIMP and not export it to disk at all. In this case, the plug-in doesn't check image size. But be warned: big images tend to take a very. Long. Time.
 
+### Latest changes
+
+* The plugin now detects if a predefined transparent colour is being used and force it to index 0.
+
 ## Original vs sample image
 
 #### As usual, here is a picture of a good girl for comparison:
@@ -77,6 +81,7 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 * [x] ignore alpha channel instead of triggering errors;
 * [x] embedded palette support;
 * [x] MSX-BASIC COPY to disk format support;
+* [x] enable user to define the transparent colour;
 * [ ] RLE encoding;
 * [ ] aPLib compression;
 * [ ] converting layers into pages;
