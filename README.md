@@ -14,6 +14,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 ### Latest changes
 
 * The plugin now detects if a predefined transparent colour is being used and force it to index 0. "Reserve index 0 as transparency" must be activated. 
+* The plugin now uses the alpha channel of RGBA images as transparent colour automatically (second option in the filter menu).
 
 ## Original vs sample image
 
