@@ -34,8 +34,6 @@ RGB = 0
 GRAY = 1
 INDEXED = 2
 
-PLUGIN_MSG = """Export bitmaps in MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)"""
-
 tuple_key = lambda pair: pair[0]
 tuple_value = lambda pair: pair[1]
 
@@ -141,9 +139,9 @@ def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
     return []
 
 
-def write_gr4_rgba(image, layer, filename, folder, dithering, exp_pal, image_enc, exp_ptp):
+def write_gr4_alpha(image, layer, filename, folder, dithering, exp_pal, image_enc, exp_ptp):
     '''
-    Export RGBA image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
+    Export image with alpha to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
     @param img: gimp image
     @param layer: gimp layer (or drawable)
@@ -435,11 +433,11 @@ def downsampling(plugin, image, use_transparent = False, dithering = True):
 
 
 gimpfu.register("msx_gr4_exporter",
-                PLUGIN_MSG,
-                "Export MSX-compatible image", 
-                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024", 
-                "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...", 
-                "RGB, Indexed", [
+                "Export bitmap as MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)",
+                "Export MSX-compatible image",
+                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024",
+                "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...",
+                "RGB, INDEXED, GRAY", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
@@ -453,16 +451,16 @@ gimpfu.register("msx_gr4_exporter",
                         ("Raw file (no palette)", "RAW"),
                         ("No output (image in new window)", "no-output"))),
                     (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
-                ], 
-                [], 
+                ],
+                [],
                 write_gr4)
 
-gimpfu.register("msx_gr4_exporter_rgba",
-                PLUGIN_MSG,
-                "Export MSX-compatible image with alpha channel", 
-                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024", 
-                "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap (RGBA)...", 
-                "RGBA", [
+gimpfu.register("msx_gr4_exporter_alpha",
+                "Export bitmap with alpha as MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)",
+                "Export MSX-compatible image",
+                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024",
+                "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap (with alpha channel)...",
+                "RGBA, INDEXEDA, GRAYA", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
@@ -474,8 +472,8 @@ gimpfu.register("msx_gr4_exporter_rgba",
                         ("Raw file (no palette)", "RAW"),
                         ("No output (image in new window)", "no-output"))),
                     (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
-                ], 
-                [], 
-                write_gr4_rgba)
+                ],
+                [],
+                write_gr4_alpha)
 
 gimpfu.main()
