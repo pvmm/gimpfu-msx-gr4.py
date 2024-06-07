@@ -11,6 +11,12 @@ GIMP script to export bitmap as GRAPHICS 4 file (a.k.a. "SCREEN 5"). GRAPHICS 4 
 
 Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You may disable **Image Encoding** altogether to create an image inside GIMP and not export it to disk at all. In this case, the plug-in doesn't check image size. But be warned: big images tend to take a very. Long. Time.
 
+### Meaning of input fields
+
+* Input transparent color: if the source image doesn't have any transparency, consider this colour the transparent colour when converting image to the MSX (index 0). This requires "Reserve index 0 as transparency" to be active.
+* Reserve index 0 as transparency: the plugin can optionally use the colour index 0 as a normal colour and improve dithering a little bit if you disable this.
+* Image encoding: common MSX image formats the plugin recognises.
+
 ### Latest changes
 
 * The plugin now detects if a predefined transparent colour is being used and force it to index 0. "Reserve index 0 as transparency" must be activated. 
