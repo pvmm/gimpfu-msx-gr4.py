@@ -69,18 +69,16 @@ class ImagePlugin:
                 return (r, g, b, 255)
             # downsampling defined only for RGB* mode
             self.downsampling = downsampling
-            if nchannels == 4 and not trans_color:
+            if trans_color:
+                self.trans_color = trans_color[0:4] if self.has_transparency else False
+                def is_transparent(self, pixel):
+                    return pixel[0:3] == self.trans_color[0:3] or pixel[3] == 0
+            else:
                 # default to "invisible black"
                 self.trans_color = (0, 0, 0, 0) if self.has_transparency else False
                 def is_transparent(self, pixel):
                     # is alpha channel completely transparent?
-                    return self.has_transparency and pixel[3] == 0
-            elif trans_color:
-                self.trans_color = trans_color[0:4] if self.has_transparency else False
-                def is_transparent(self, pixel):
-                    return self.has_transparency and pixel[0:3] == self.trans_color[0:3]
-            else:
-                raise Exception("Unsupported number of channels: " + nchannels)
+                    return pixel[3] == 0
             self.is_transparent = is_transparent
 
         elif type_ == INDEXED:
@@ -131,7 +129,7 @@ def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
         errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
 
     if image_enc in ('RLE', 'aPLib'):
-        errors.append("compression is not implemented yet.")
+        errors.append('compression is not implemented yet.')
 
     if errors:
         return errors
@@ -152,10 +150,10 @@ def write_gr4_alpha(image, layer, filename, folder, dithering, exp_pal, image_en
     @param image_enc: output encoding
     @param exp_ptp: export plain-text-palette data too
     '''
-    write_gr4(image, layer, filename, folder, dithering, exp_pal, False, True, image_enc, exp_ptp)
+    write_gr4(image, layer, filename, folder, dithering, exp_pal, True, False, image_enc, exp_ptp)
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, has_transparency, image_enc, exp_ptp):
+def write_gr4(image, layer, filename, folder, dithering, exp_pal, has_transparency, trans_color, image_enc, exp_ptp):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -165,8 +163,8 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, h
     @param folder: output directory
     @param dithering: whether dithering is active
     @param exp_pal: export palette data too
-    @param trans_color: RGB components of input color to be considered transparent
     @param has_transparency: transparency support consumes color index 0
+    @param trans_color: RGB components of input color to be considered transparency
     @param image_enc: output encoding
     @param exp_ptp: export plain-text-palette data too
     '''
@@ -175,6 +173,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, h
         gimp.message("\n".join(errors))
         return
 
+    # If there is no transparency, there is no transparent color
     if not has_transparency:
         trans_color = False
 
@@ -206,6 +205,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, h
         plugin = ImagePlugin(new_image, has_transparency, trans_color)
     except Exception as e:
         gimp.message(e.args[0])
+        gimp.delete(new_image)
         return
 
     # create palette data
@@ -215,7 +215,12 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, h
     if not palette:
         # disable dithering when transparency is used
         use_transparency = check_transparency(plugin, new_image)
-        drawable = downsampling(plugin, new_image, use_transparency, dithering)
+        try:
+            drawable = downsampling(plugin, new_image, use_transparency, dithering)
+        except TypeError:
+            gimp.message('Wrong plugin: alpha channel is being used.')
+            gimp.delete(new_image)
+            return
         #gimpfu.pdb.gimp_display_new(new_image) # disply downsampled image
         histogram = create_histogram(plugin, drawable)
         palette = quantize_colors(histogram, max_colors)
@@ -292,6 +297,7 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, trans_color, h
         file = open(os.path.join(folder, '%s.%s' % (filename, image_enc)), 'wb')
         file.write(encoded)
         file.close()
+        gimp.delete(new_image)
     else:
         gimpfu.pdb.gimp_display_new(new_image)
 
@@ -301,14 +307,21 @@ def check_transparency(plugin, image):
         return False
 
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
-    # Only even sizes are permitted.
-    width, height = gimpfu.pdb.gimp_drawable_width(drawable) & ~1, gimpfu.pdb.gimp_drawable_height(drawable) & ~1
+    width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
+
+    percent = 0.0
+    gimpfu.pdb.gimp_progress_init('Checking image alpha channel...', None)
+    gimpfu.pdb.gimp_progress_update(percent)
+    step = 1.0 / height
 
     for y in range(height):
         for x in range(width):
             _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
             if plugin.is_transparent(plugin, c):
                 return True
+        percent += step
+        gimpfu.pdb.gimp_progress_update(percent)
+
     return False
 
 
@@ -437,13 +450,13 @@ gimpfu.register("msx_gr4_exporter",
                 "Export MSX-compatible image",
                 "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024",
                 "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...",
-                "RGB, INDEXED, GRAY", [
+                "RGB*, INDEXED*, GRAY*", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
                     (gimpfu.PF_DIRNAME, "folder", "Output Folder", DEFAULT_OUTPUT_DIR),
                     (gimpfu.PF_BOOL, "dithering", "Dithering", True),
                     (gimpfu.PF_BOOL, "exp-pal", "Export palette", False),
+                    (gimpfu.PF_BOOL, "has_transparency", "Reserve index 0 as transparency", True),
                     (gimpfu.PF_COLOR, "trans_color", "Input transparent color", (0xff, 0x0, 0xff)),
-                    (gimpfu.PF_BOOL, "transparency", "Reserve index 0 as transparency", True),
                     (gimpfu.PF_RADIO, "image-enc", "Image Encoding", DEFAULT_OUTPUT_FMT,
                        (("Binary format with palette (SC5)", "SC5"),
                         ("Binary format without palette (SR5)", "SR5"),
