@@ -23,6 +23,7 @@ from gi.repository import Gegl
 from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import Gio
+from contextlib import suppress
 
 import os
 import sys
@@ -32,20 +33,151 @@ import sys
 MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 256
+ENC_GROUP = {0: "SC5", 1: "SR5", 2: "DAT", 3: "RAW", 4: "no-output" }
 
 
+# translation functions
 def N_(message): return message
 def _(message): return GLib.dgettext(None, message)
+
+
+class InvalidAlphaValueError(Exception):
+    pass
+
+
+class ImageFormatError(Exception):
+    pass
+
+
+tuple_key = lambda pair: pair[0]
+tuple_value = lambda pair: pair[1]
 
 
 def on_combo_changed(combo, affected_element):
     affected_element.set_sensitive(False if combo.get_active() == 1 else True)
 
 
-class InvalidAlphaValueError(Exception):
-    pass
-class ImageFormatError(Exception):
-    pass
+def normalize(color):
+    return int(color.red * 255), int(color.green * 255), int(color.blue * 255), int(color.alpha * 255)
+
+
+def get_pixel(drawable, x, y):
+    return tuple(drawable.get_buffer().get(Gegl.Rectangle.new(x, y, 1, 1), 1.0, "RGBA u8",
+        Gegl.AUTO_ROWSTRIDE))
+
+
+def set_pixel(drawable, x, y, pixel):
+    drawable.get_buffer().set(Gegl.Rectangle.new(x, y, 1, 1), "RGBA u8", pixel)
+
+
+def compress_rgba(pixel):
+    r = int(round(float(pixel[0]) / 0xff * 7)) << 5
+    g = int(round(float(pixel[1]) / 0xff * 7)) << 5
+    b = int(round(float(pixel[2]) / 0xff * 7)) << 5
+    return (r, g, b, 255)
+
+
+def scatter_noise(drawable, x, y, error):
+    width = drawable.get_width()
+    height = drawable.get_height()
+
+    NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
+    for offset_x, offset_y, debt in NEIGHBORS:
+        with supress(IndexError):
+            off_x, off_y = x + offset_x, y + offset_y
+            if off_x < 0 or off_y < 0 or off_x >= width or off_y >= height:
+                continue
+            c = get_pixel(drawable, off_x, off_y)
+            d = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(c, error))
+            #print 'pos:', (off_x + 255 * off_y), " c/d:", c, d
+            set_pixel(drawable, off_x, off_y, d)
+
+
+def downsampling(image, trans_color, dithering):
+    drawable = image.get_layers()[0]
+    buffer = drawable.get_buffer()
+    x = 0
+    for y in range(drawable.get_height()):
+        for x in range(drawable.get_width()):
+            c = get_pixel(drawable, x, y)
+            if c != trans_color:
+                d = compress_rgba(c)
+                set_pixel(drawable, x, y, d)
+                if dithering:
+                    # ignore alpha channel in c and d
+                    error = [old - new for old, new in zip(c[0:3], d[0:3])]
+                    scatter_noise(drawable, x, y, error)
+    return drawable
+
+
+def create_histogram(drawable):
+    histogram = {}
+
+    #percent = 0.0
+    #step = 1.0 / drawable.get_height()
+
+    #gimpfu.pdb.gimp_progress_init('Creating histogram...', None)
+    #gimpfu.pdb.gimp_progress_update(0)
+
+    for y in range(drawable.get_height()):
+        for x in range(drawable.get_width()):
+            c = get_pixel(drawable, x, y)
+            if c == trans_color: continue
+            histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
+
+        #percent += step
+        #gimpfu.pdb.gimp_progress_update(percent)
+
+    return histogram.items()
+
+
+def quantize_colors(histogram, length):
+    """Group similar colours reducing palette to "length"."""
+    palette = []
+
+    #gimpfu.pdb.gimp_progress_init('Quantizing colors...', None)
+    #gimpfu.pdb.gimp_progress_update(0.0)
+
+    percent = 0.0
+    step = float(len(histogram) - length) / 100
+
+    while len(histogram) > length:
+        # Order histogram by color usage (this is slooooooow!)
+        histogram.sort(key=tuple_value)
+
+        # Get least frequent item and its nearest cousin by colour
+        color1, freq = histogram.pop(0)
+        distances = [
+            (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(histogram[1:], start=1)
+        ]
+        index, _ = min(distances, key=tuple_value)
+
+        # add removed item's frequency into nearest cousin's frequency
+        histogram[index] = (histogram[index][0], histogram[index][1] + freq)
+
+        percent += step
+        #gimpfu.pdb.gimp_progress_update(percent)
+
+    for index, (color, _) in enumerate(sorted(histogram, key=tuple_key)):
+        palette.append((color, index))
+
+    return palette
+
+
+def create_distance_query(palette):
+    palmap = {k:v for k, v in palette}
+
+    def query_index(pixel):
+        idx = palmap.get(pixel)
+        if idx:
+            return palette[idx][1], palette[idx][0]
+        dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
+        mdst = min(dsts, key=tuple_value)
+        #print('pixel =', pixel, ' distances =', dsts, ' min =', mdst)
+        palmap[pixel] = mdst[0]
+        return mdst[0], mdst[2]
+
+    return query_index
 
 
 class Graph4Exporter (Gimp.PlugIn):
@@ -179,18 +311,19 @@ class Graph4Exporter (Gimp.PlugIn):
             radio_box.pack_start(radio3, False, False, 0)
             radio_box.pack_start(radio4, False, False, 0)
             radio_box.pack_start(radio5, False, False, 0)
+            print("dir", radio_box.get_children())
             grid.attach(radio_label, 0, 6, 1, 1)
             grid.attach(radio_box, 1, 6, 1, 1)
 
             # Reserve index 0 as transparency
-            plain_label = Gtk.Label(label="Export plain text palette")
-            plain_label.set_halign(Gtk.Align.END)
-            plain_combo = Gtk.ComboBoxText()
-            plain_combo.append_text("On")
-            plain_combo.append_text("Off")
-            plain_combo.set_active(1)
-            grid.attach(plain_label, 0, 7, 1, 1)
-            grid.attach(plain_combo, 1, 7, 1, 1)
+            pal_label = Gtk.Label(label="Export plain text palette")
+            pal_label.set_halign(Gtk.Align.END)
+            pal_combo = Gtk.ComboBoxText()
+            pal_combo.append_text("On")
+            pal_combo.append_text("Off")
+            pal_combo.set_active(1)
+            grid.attach(pal_label, 0, 7, 1, 1)
+            grid.attach(pal_combo, 1, 7, 1, 1)
 
             # Connect the index0 "changed" signal to trans_button
             index0_combo.connect("changed", on_combo_changed, trans_button)
@@ -200,18 +333,18 @@ class Graph4Exporter (Gimp.PlugIn):
             result = Gimp.PDBStatusType.CANCEL
 
             if response == Gtk.ResponseType.OK:
+                grid.set_sensitive(False)
                 file_value = file_entry.get_text()
                 folder_value = folder_button.get_filename()
                 dithering_value = dithering_combo.get_active()
                 export_value = export_combo.get_active()
                 index0_value = index0_combo.get_active()
-                trans_color = trans_button.get_rgba()
-                encoding_value = (radio1.get_active(), radio2.get_active(), radio3.get_active(), radio4.get_active(),
-                                  radio5.get_active()).index(1)
-                plain_value = plain_combo.get_active()
+                trans_color = normalize(trans_button.get_rgba())
+                encoding_value = ENC_GROUP[[item.get_active() for item in radio_box.get_children()].index(1)]
+                pal_value = pal_combo.get_active()
                 try:
-                    result = self.convert_gr4(image, file_value, folder_value, dithering_value, export_value,
-                                              index0_value, trans_color, encoding_value, plain_value)
+                    result = convert(image, file_value, folder_value, dithering_value, export_value,
+                                     index0_value, trans_color, encoding_value, pal_value)
                 except Exception as e:
                     error = GLib.Error.new_literal(Gimp.PlugIn.error_quark(), str(e), 0)
                     return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR, error)
@@ -219,65 +352,143 @@ class Graph4Exporter (Gimp.PlugIn):
             dialog.destroy()
             return procedure.new_return_values(result, GLib.Error())
 
-    def convert_gr4(self, image, file_value, folder_value, dithering_value, export_value, index0_value,
-                    trans_color, encoding_value, plain_value):
+def convert(image, filename, folder_value, dithering_value, export_pal, index0_value,
+            trans_color, encoding, pal_file):
 
-        print(image, file_value, folder_value, dithering_value, export_value, index0_value, trans_color,
-              encoding_value, plain_value, sep="\n")
+    print(image, filename, folder_value, dithering_value, export_pal, index0_value, trans_color,
+          encoding, pal_file, sep="\n")
 
-        # transparent color ignored if specified
-        if not index0_value: trans_color = False
+    # transparent color ignored if specified
+    if not index0_value:
+        trans_color = None
+        max_colors = MAX_COLORS
+    else:
+        max_colors = MAX_COLORS - 1
 
-        dup = image.duplicate()
-        if not dup.get_layers()[0].has_alpha:
-            dup.get_layers()[0].add_alpha()
-            print(f"Added alpha to layer: {dup.get_layers()[0].get_name()}")
+    dup = image.duplicate()
+    if not dup.get_layers()[0].has_alpha:
+        dup.get_layers()[0].add_alpha()
+        print(f"Added alpha to layer: {dup.get_layers()[0].get_name()}")
 
-        drawable = dup.get_layers()[0]
-        width = drawable.get_width()
-        height = drawable.get_height()
-        if not encoding_value in (3, 5) and width != 256:
-            raise ImageFormatError(_("Width is not 256 ({}).").format(width))
+    drawable = dup.get_layers()[0]
+    width = drawable.get_width()
+    height = drawable.get_height()
+    if not encoding in (3, 5) and width != 256:
+        raise ImageFormatError(_("Width should be 256 (not {}) for this image type.").format(width))
 
-        type_ = dup.get_base_type()
-        print("type =", type_)
-        if type_ == Gimp.ImageBaseType.INDEXED:
-            len_colormap, colormap = gather_colormap(drawable)
-            #dup.convert_rgb()
-            print("indexed")
-            #num_bytes, colormap = dup.get_colormap()
-        elif type_ == Gimp.ImageBaseType.GRAY:
-            #dup.convert_rgb()
-            print("gray")
+    # create palette data
+    pal9bits = [0] * 2 * MAX_COLORS
+    txtpal = [(0, 0, 0)] * MAX_COLORS
+
+    use_transparency, colormap = process_image_colors(drawable, trans_color)
+    # disable dithering when transparency is used
+    if not use_transparency:
+        trans_color = None
+        dithering_value = 0
+    drawable = downsampling(dup, trans_color, dithering_value)
+    histogram = create_histogram(drawable)
+    palette = quantize_colors(histogram, max_colors)
+    query = create_distance_query(palette)
+
+    for (r, g, b), index in palette:
+        # Start palette at color 1 if transparency is set.
+        i = index + has_transparency
+        pal9bits[i * 2] = 16 * (r >> 5) + (b >> 5)
+        pal9bits[i * 2 + 1] = (g >> 5)
+        txtpal[i] = (r >> 5, g >> 5, b >> 5)
+
+    if pal_file:
+        with open(os.path.join(folder, '%s.TXT' % filename), 'wt') as file:
+            print("SCREEN 5 palette:", file=file)
+            for i, (r, g, b) in enumerate(txtpal):
+                print('%i: %i, %i, %i' % (i, r, g, b), file=file)
+
+    if export_pal:
+        encoded = struct.pack('<BHHH{}B'.format(len(pal9bits)), BIN_PREFIX, PALETTE_OFFSET,
+                PALETTE_OFFSET + len(pal9bits), 0, *pal9bits[0:len(pal9bits)])
+        with open(os.path.join(folder, '%s.PAL' % filename), 'wb') as file:
+            file.write(encoded)
+
+    #gimpfu.pdb.gimp_progress_init('Exporting image to %s format...' % encoding, None)
+    #gimpfu.pdb.gimp_progress_update(0)
+        
+    # buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
+    if encoding == 'DAT':
+        buffer = [0] * (width // 2) * height
+    else:
+        buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
+
+    step = 1.0 / height
+    percent = 0.0
+
+    if encoding != 'no-output':
+        for y in range(height):
+            for x in range(width):
+                if type_ == RGB:
+                    # num_channels, RGBA
+                    _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                    if plugin.is_transparent(plugin, c):
+                        # index of transparent color is always 0
+                        index = 0
+                    else:
+                        index, _ = query((c[0], c[1], c[2]))
+                        index += has_transparency
+                else:
+                    # num_channels, index, alpha
+                    _, (index, _) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
+                    index += has_transparency
+                pos = x // 2 + y * (width // 2)
+                buffer[pos] |= index if x % 2 else index << 4;
+
+            #percent += step
+            #gimpfu.pdb.gimp_progress_update(percent)
+
+        # Embed palette into image data (SC5 only)
+        if encoding == 'SC5':
+            for pos in range(32):
+                buffer[0x7680 + pos] = pal9bits[pos]
+
+        if encoding == 'RAW':
+            encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
+        elif encoding == 'DAT':
+            encoded = struct.pack('<HH{}B'.format(width * height // 2), width, height, *buffer)
         else:
-            len_colormap, colormap = gather_colormap(drawable)
-            print("rgb*")
+            encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
+        with open(os.path.join(folder, '%s.%s' % (filename, encoding)), 'wb') as file:
+            file.write(encoded)
 
+        # Delete scratch image
+        dup.delete()
+    else:
         # Display the duplicated image
         Gimp.Display.new(dup)
 
-        return Gimp.PDBStatusType.SUCCESS
+    return Gimp.PDBStatusType.SUCCESS
 
-def gather_colormap(drawable):
-    """Scan image gathering all colors used."""
+
+def process_image_colors(drawable, trans_color):
+    """Process image and gather all used colors."""
     colormap = {}
-
+    use_transparency = False
     buffer = drawable.get_buffer()
-    rect = Gegl.Rectangle()
-    rect.x = 0
-    rect.y = 0
-    rect.width = drawable.get_width()
-    rect.height = 1
-
+    rect = Gegl.Rectangle.new(0, 0, drawable.get_width(), 1)
     for y in range(0, drawable.get_height()):
         rect.y = y
         linebuf = buffer.get(rect, 1.0, "RGBA u8", Gegl.AUTO_ROWSTRIDE)
         pixels = [tuple(linebuf[i : i + 4]) for i in range(0, len(linebuf), 4)]
         for (r, g, b, a) in pixels:
             if not a in (0, 255):
-                raise InvalidAlphaValueError(_("Invalid alpha value {}.").format(a))
-            colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
-    return len(colormap), colormap
+                raise InvalidAlphaValueError(_("Invalid alpha value {}, 0 or 255 expected.").format(a))
+            elif a == 0:
+                if not trans_color:
+                    raise NoTransparentColor(_("Alpha channel not expected but found in image."))
+                set_pixel(drawable, x, y, trans_color)
+                colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
+                use_transparency = True
+            else:
+                colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
+    return use_transparency, colormap
+
 
 Gimp.main(Graph4Exporter.__gtype__, sys.argv)
 
