@@ -24,16 +24,22 @@ from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import Gio
 from contextlib import suppress
+from math import sqrt
 
 import os
 import sys
+import struct
 
 
 # constants
 MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 256
+MAX_PAGES = 4
 ENC_GROUP = {0: "SC5", 1: "SR5", 2: "DAT", 3: "RAW", 4: "no-output" }
+BIN_PREFIX = 0xFE
+DEFAULT_FILENAME = 'NONAME'
+PALETTE_OFFSET = 0x7680
 
 
 # translation functions
@@ -110,7 +116,7 @@ def downsampling(image, trans_color, dithering):
     return drawable
 
 
-def create_histogram(drawable):
+def create_histogram(drawable, trans_color):
     histogram = {}
 
     #percent = 0.0
@@ -131,34 +137,43 @@ def create_histogram(drawable):
     return histogram.items()
 
 
+def distance(src, dst):
+    r1, g1, b1 = src
+    r2, g2, b2 = dst
+    return sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2)
+
+
 def quantize_colors(histogram, length):
     """Group similar colours reducing palette to "length"."""
     palette = []
+    hist = list(histogram)
+    print('histogram', hist)
 
     #gimpfu.pdb.gimp_progress_init('Quantizing colors...', None)
     #gimpfu.pdb.gimp_progress_update(0.0)
 
-    percent = 0.0
-    step = float(len(histogram) - length) / 100
+    #percent = 0.0
+    #step = float(len(hist) - length) / 100
 
-    while len(histogram) > length:
+    while len(hist) > length:
         # Order histogram by color usage (this is slooooooow!)
-        histogram.sort(key=tuple_value)
+        hist = sorted(hist, key=tuple_value)
+        #histogram.sort(key=tuple_value)
 
         # Get least frequent item and its nearest cousin by colour
-        color1, freq = histogram.pop(0)
+        color1, freq = hist.pop(0)
         distances = [
-            (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(histogram[1:], start=1)
+            (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(hist[1:], start=1)
         ]
         index, _ = min(distances, key=tuple_value)
 
         # add removed item's frequency into nearest cousin's frequency
-        histogram[index] = (histogram[index][0], histogram[index][1] + freq)
+        hist[index] = (hist[index][0], hist[index][1] + freq)
 
-        percent += step
+        #percent += step
         #gimpfu.pdb.gimp_progress_update(percent)
 
-    for index, (color, _) in enumerate(sorted(histogram, key=tuple_key)):
+    for index, (color, _) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
 
     return palette
@@ -245,7 +260,7 @@ class Graph4Exporter (Gimp.PlugIn):
             file_label = Gtk.Label(label="File name")
             file_label.set_halign(Gtk.Align.END)
             file_entry = Gtk.Entry()
-            file_entry.set_text("NONAME")
+            file_entry.set_text(DEFAULT_FILENAME)
             grid.attach(file_label, 0, 0, 1, 1)
             grid.attach(file_entry, 1, 0, 1, 1)
 
@@ -311,7 +326,6 @@ class Graph4Exporter (Gimp.PlugIn):
             radio_box.pack_start(radio3, False, False, 0)
             radio_box.pack_start(radio4, False, False, 0)
             radio_box.pack_start(radio5, False, False, 0)
-            print("dir", radio_box.get_children())
             grid.attach(radio_label, 0, 6, 1, 1)
             grid.attach(radio_box, 1, 6, 1, 1)
 
@@ -352,19 +366,16 @@ class Graph4Exporter (Gimp.PlugIn):
             dialog.destroy()
             return procedure.new_return_values(result, GLib.Error())
 
-def convert(image, filename, folder_value, dithering_value, export_pal, index0_value,
+def convert(image, filename, folder, dithering, export_pal, skip_index0,
             trans_color, encoding, pal_file):
-
-    print(image, filename, folder_value, dithering_value, export_pal, index0_value, trans_color,
-          encoding, pal_file, sep="\n")
-
-    # transparent color ignored if specified
-    if not index0_value:
+    # transparent color ignored if not required
+    if not skip_index0:
         trans_color = None
         max_colors = MAX_COLORS
     else:
         max_colors = MAX_COLORS - 1
 
+    # add alpha channel to image
     dup = image.duplicate()
     if not dup.get_layers()[0].has_alpha:
         dup.get_layers()[0].add_alpha()
@@ -373,26 +384,39 @@ def convert(image, filename, folder_value, dithering_value, export_pal, index0_v
     drawable = dup.get_layers()[0]
     width = drawable.get_width()
     height = drawable.get_height()
-    if not encoding in (3, 5) and width != 256:
-        raise ImageFormatError(_("Width should be 256 (not {}) for this image type.").format(width))
+    if not encoding in ("DAT", "no-output") and width != MAX_WIDTH:
+        raise ImageFormatError(_("Width should be exactly 256 (currently {}) for this image type.").format(width))
+    elif encoding != "no-output" and width > MAX_WIDTH:
+        raise ImageFormatError(_("Width should not be greater than 256 (currently {}) for this image type.").format(width))
+    elif encoding != "no-output" and height > MAX_HEIGHT:
+        raise ImageFormatError(_("Height should not be greater than 256 (currently {}) for this image type.").format(height))
+
+    if height > MAX_HEIGHT * MAX_PAGES:
+        raise ImageFormatError(_("Height must not be greater than {}.").format(MAX_HEIGHT * MAX_PAGES))
 
     # create palette data
     pal9bits = [0] * 2 * MAX_COLORS
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
-    use_transparency, colormap = process_image_colors(drawable, trans_color)
-    # disable dithering when transparency is used
-    if not use_transparency:
+    used_transparency, colormap = preprocess_image(drawable, trans_color)
+    if not used_transparency:
+        # transparent color ignored if not used
         trans_color = None
-        dithering_value = 0
-    drawable = downsampling(dup, trans_color, dithering_value)
-    histogram = create_histogram(drawable)
+    else:
+        # disable dithering when transparency is used
+        dithering = 0
+    print("downsampling...")
+    drawable = downsampling(dup, trans_color, dithering)
+    print("downsampling applied.")
+    histogram = create_histogram(drawable, trans_color)
+    print("creating histogram...")
     palette = quantize_colors(histogram, max_colors)
+    print("histogram created.", palette)
     query = create_distance_query(palette)
 
     for (r, g, b), index in palette:
-        # Start palette at color 1 if transparency is set.
-        i = index + has_transparency
+        # Start palette at color 1 if transparency is used.
+        i = index + used_transparency
         pal9bits[i * 2] = 16 * (r >> 5) + (b >> 5)
         pal9bits[i * 2 + 1] = (g >> 5)
         txtpal[i] = (r >> 5, g >> 5, b >> 5)
@@ -412,31 +436,21 @@ def convert(image, filename, folder_value, dithering_value, export_pal, index0_v
     #gimpfu.pdb.gimp_progress_init('Exporting image to %s format...' % encoding, None)
     #gimpfu.pdb.gimp_progress_update(0)
         
-    # buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
-    if encoding == 'DAT':
-        buffer = [0] * (width // 2) * height
-    else:
-        buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
-
-    step = 1.0 / height
-    percent = 0.0
+    # complete buffer size
+    buffer = [0] * (width // 2) * height
+    #step = 1.0 / height
+    #percent = 0.0
 
     if encoding != 'no-output':
         for y in range(height):
             for x in range(width):
-                if type_ == RGB:
-                    # num_channels, RGBA
-                    _, c = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                    if plugin.is_transparent(plugin, c):
-                        # index of transparent color is always 0
-                        index = 0
-                    else:
-                        index, _ = query((c[0], c[1], c[2]))
-                        index += has_transparency
+                c = get_pixel(drawable, x, y)
+                if c == trans_color:
+                    # index of transparent color is always 0
+                    index = 0
                 else:
-                    # num_channels, index, alpha
-                    _, (index, _) = gimpfu.pdb.gimp_drawable_get_pixel(drawable, x, y)
-                    index += has_transparency
+                    index, _ = query((c[0], c[1], c[2]))
+                    index += skip_index0
                 pos = x // 2 + y * (width // 2)
                 buffer[pos] |= index if x % 2 else index << 4;
 
@@ -466,10 +480,10 @@ def convert(image, filename, folder_value, dithering_value, export_pal, index0_v
     return Gimp.PDBStatusType.SUCCESS
 
 
-def process_image_colors(drawable, trans_color):
-    """Process image and gather all used colors."""
+def preprocess_image(drawable, trans_color):
+    """Pre-process image and gather all used colors."""
     colormap = {}
-    use_transparency = False
+    used_transparency = False
     buffer = drawable.get_buffer()
     rect = Gegl.Rectangle.new(0, 0, drawable.get_width(), 1)
     for y in range(0, drawable.get_height()):
@@ -478,16 +492,18 @@ def process_image_colors(drawable, trans_color):
         pixels = [tuple(linebuf[i : i + 4]) for i in range(0, len(linebuf), 4)]
         for (r, g, b, a) in pixels:
             if not a in (0, 255):
-                raise InvalidAlphaValueError(_("Invalid alpha value {}, 0 or 255 expected.").format(a))
+                raise InvalidAlphaValueError(_("Invalid alpha value {} (0 or 255 expected).").format(a))
             elif a == 0:
                 if not trans_color:
-                    raise NoTransparentColor(_("Alpha channel not expected but found in image."))
+                    raise NoTransparentColor(_("Transparent pixel not expected but found in image."))
                 set_pixel(drawable, x, y, trans_color)
                 colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
-                use_transparency = True
+                used_transparency = 1
+            elif (r, g, b) == trans_color:
+                used_transparency = 1
             else:
                 colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
-    return use_transparency, colormap
+    return used_transparency, colormap
 
 
 Gimp.main(Graph4Exporter.__gtype__, sys.argv)
