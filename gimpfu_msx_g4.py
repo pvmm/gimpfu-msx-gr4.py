@@ -14,12 +14,16 @@
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import gi
+
 gi.require_version('Gimp', '3.0')
 from gi.repository import Gimp
+
 gi.require_version('GimpUi', '3.0')
 from gi.repository import GimpUi
+
 gi.require_version('Gegl', '0.4')
 from gi.repository import Gegl
+
 from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import Gio
@@ -76,10 +80,11 @@ def set_pixel(drawable, x, y, pixel):
     drawable.get_buffer().set(Gegl.Rectangle.new(x, y, 1, 1), "RGBA u8", pixel)
 
 
-def compress_rgba(pixel):
-    r = int(round(float(pixel[0]) / 0xff * 7)) << 5
-    g = int(round(float(pixel[1]) / 0xff * 7)) << 5
-    b = int(round(float(pixel[2]) / 0xff * 7)) << 5
+def compress_rgba((r, g, b, a)):
+    """Convert RGBA to MSX2 pixel format."""
+    r = int(round(float(r) / 0xff * 7)) << 5
+    g = int(round(float(g) / 0xff * 7)) << 5
+    b = int(round(float(b) / 0xff * 7)) << 5
     return (r, g, b, 255)
 
 
@@ -95,7 +100,7 @@ def scatter_noise(drawable, x, y, error):
                 continue
             c = get_pixel(drawable, off_x, off_y)
             d = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(c, error))
-            #print 'pos:', (off_x + 255 * off_y), " c/d:", c, d
+            #print('pos:', (off_x + 255 * off_y), " c/d:", c, d)
             set_pixel(drawable, off_x, off_y, d)
 
 
