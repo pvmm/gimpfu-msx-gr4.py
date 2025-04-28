@@ -25,7 +25,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 ## Original vs sample image
 
 #### As usual, here is a picture of a good girl for comparison:
-![Original image](images/original.jpg "Original image")
+![Original image](images/original.png "Original image")
 ![Result image](images/result.png "Result image")
 
 ## Installation: 
