@@ -26,7 +26,7 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 
 #### As usual, here is a picture of a good girl for comparison:
 ![Original image](images/original.jpg "Original image")
-![Sample image](images/sample.jpg "Sample image")
+![Result image](images/result.png "Result image")
 
 ## Installation: 
 - Change permission to execute the file:
