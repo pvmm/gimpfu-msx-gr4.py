@@ -10,6 +10,7 @@ Installation:
     - Run script via Filters/MSX/Export GRAPHICS 4 bitmap...
 '''
 
+from __future__ import print_function
 import gimpfu
 import gimp
 import os
@@ -47,7 +48,7 @@ def create_distance_query(palette):
             return palette[idx][1], palette[idx][0]
         dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
         mdst = min(dsts, key=tuple_value)
-        #print 'pixel =', pixel, ' distances =', dsts, ' min =', mdst
+        #print('pixel =', pixel, ' distances =', dsts, ' min =', mdst)
         palmap[pixel] = mdst[0]
         return mdst[0], mdst[2]
 
@@ -235,10 +236,10 @@ def write_gr4(image, layer, filename, folder, dithering, exp_pal, has_transparen
 
     if exp_ptp:
         file = open(os.path.join(folder, '%s.TXT' % filename), 'wt')
-        print >>file, 'SCREEN 5 palette:'
+        print('SCREEN 5 palette:', file=file)
         i = 0
         for (r, g, b) in txtpal:
-            print >>file, '%i: %i, %i, %i' % (i, r, g, b)
+            print('%i: %i, %i, %i' % (i, r, g, b), file=file)
             i += 1
         file.close()
 
@@ -403,7 +404,7 @@ def scatter_noise(drawable, x, y, error):
 
             nchannels, pixel = gimpfu.pdb.gimp_drawable_get_pixel(drawable, off_x, off_y)
             npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
-            #print 'pos:', (off_x + 255 * off_y), " pixel/npixel:", pixel, npixel
+            print('pos:', (off_x + 256 * off_y), " pixel/npixel:", pixel, npixel)
             gimpfu.pdb.gimp_drawable_set_pixel(drawable, off_x, off_y, nchannels, npixel)
 
         except Exception:
