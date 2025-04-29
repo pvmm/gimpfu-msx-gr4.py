@@ -80,7 +80,7 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 ## TODO
 
 * [ ] ordered dithering;
-* [ ] make it faster (dithering is very slow and stupidly unoptimised);
+* [x] make it faster (GIMP3 version);
 * [x] enable or disable transparent colour;
 * [x] palette export;
 * [x] RGB to indexed conversion;
