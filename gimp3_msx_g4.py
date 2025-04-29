@@ -45,6 +45,7 @@ ENC_GROUP = {0: "SC5", 1: "SR5", 2: "DAT", 3: "RAW", 4: "no-output" }
 BIN_PREFIX = 0xFE
 DEFAULT_FILENAME = 'NONAME'
 PALETTE_OFFSET = 0x7680
+LAST_PALETTE_POS = 0x76a0
 
 # exit status results
 UNFINISHED = -1
@@ -90,7 +91,7 @@ def scatter_noise(plugin, x, y, error):
         pixel = plugin.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
         #print('pos:', (off_x, off_y), ':', pixel, '->', npixel)
-        plugin.set_pixel(off_x, off_y, npixel + (, 255))
+        plugin.set_pixel(off_x, off_y, npixel + (255,))
 
 
 def downsampling(plugin, trans_color, dithering):
@@ -279,8 +280,14 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
                 print("SCREEN 5 palette:", file=file)
                 for i, (r, g, b) in enumerate(txtpal):
                     print('%i: %i, %i, %i' % (i, r, g, b), file=file)
+
         # complete buffer
-        buffer = [0] * (plugin.width // 2) * plugin.height
+        if encoding == 'SC5':
+            # make sure to save space for inner palette
+            buffer = [0] * max(LAST_PALETTE_POS, (plugin.width // 2) * plugin.height)
+        else:
+            buffer = [0] * (plugin.width // 2) * plugin.height
+
         for y in range(plugin.height):
             for x in range(plugin.width):
                 c = plugin.get_pixel(x, y)
@@ -501,18 +508,7 @@ class Graph4Exporter (Gimp.PlugIn):
         )
         self.dialog.set_modal(True)
 
-        # Grid
-        grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin=10)
-        content_area = self.dialog.get_content_area()
-        content_area.add(grid)
-
-        # Progress bar
-        self.progress_bar = Gtk.ProgressBar.new()
-        self.progress_bar.set_fraction(0.0)
-        self.progress_bar.set_show_text(True)
-        self.progress_bar.set_sensitive(False)
-        grid.attach(self.progress_bar, 0, 0, 1, 1)
-
+        # Run code in a different thread
         threading.Thread(target=convert, args=args).start()
 
         # block interface until done
@@ -563,9 +559,8 @@ class PluginConnector:
             plugin = self.plugin
             GLib.idle_add(lambda: plugin.done(*status))
         else:
-            progress_bar = self.plugin.progress_bar
-            GLib.idle_add(lambda: progress_bar.set_fraction(fraction))
-            if text: GLib.idle_add(lambda: progress_bar.set_text(text))
+            GLib.idle_add(lambda: Gimp.progress_update(fraction))
+            if text: GLib.idle_add(lambda: Gimp.progress_init(text))
 
     def set_pixel(self, x, y, pixel):
         self.buffer[x + y * self.width] = pixel
