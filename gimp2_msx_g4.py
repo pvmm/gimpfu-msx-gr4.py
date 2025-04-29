@@ -5,7 +5,8 @@ Created on 2021/11/30
 @author: Pedro de Medeiros <pedro.medeiros@gmail.com>
 
 Installation: 
-    - Put this file into your GIMP plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimpfu_msx_g4.py
+    - For GIMP2, put this file into your GIMP plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp2_msx_gr4.py
+    - For GIMP3, put this file inside a subdirectory with the same name in your plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_gr4/gimp3_msx_gr4.py
     - Restart Gimp
     - Run script via Filters/MSX/Export GRAPHICS 4 bitmap...
 '''
@@ -447,9 +448,9 @@ def downsampling(plugin, image, use_transparent = False, dithering = True):
 
 
 gimpfu.register("msx_gr4_exporter",
-                "Export bitmap as MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)",
+                "Export GRAPHICS 4 bitmap (a.k.a. SCREEN 5 in BASIC)",
                 "Export MSX-compatible image",
-                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024",
+                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2025",
                 "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap...",
                 "RGB*, INDEXED*, GRAY*", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
@@ -470,9 +471,9 @@ gimpfu.register("msx_gr4_exporter",
                 write_gr4)
 
 gimpfu.register("msx_gr4_exporter_alpha",
-                "Export bitmap with alpha as MSX2 GRAPHICS 4 format (a.k.a. SCREEN 5 in BASIC)",
+                "Export MSX2 GRAPHICS 4 bitmap with alpha (a.k.a. SCREEN 5 in BASIC)",
                 "Export MSX-compatible image",
-                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2024",
+                "Pedro de Medeiros", "Pedro de Medeiros", "2021-2025",
                 "<Image>/Filters/MSX/Export GRAPHICS 4 bitmap (with alpha channel)...",
                 "RGBA, INDEXEDA, GRAYA", [
                     (gimpfu.PF_STRING, "filename", "File name", DEFAULT_FILENAME),
