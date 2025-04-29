@@ -30,13 +30,13 @@ Plug-in is accessible through _Filters > MSX >> Export GRAPHICS 4 bitmap_.  You 
 
 ## Installation: 
 - Change permission to execute the file:
-  - ```chmod +x gimpfu_msx_g4.py```
-- For GIMP 2.XX, put the file in your GIMP plugin directory:
+  - ```chmod +x gimp3_msx_g4.py```
+- For GIMP 2.XX, put `gimp2_msx_g4.py` in your GIMP plugin directory:
   - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/`;
   - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
-- For GIMP 3.XX, put the file in a subdirectory with the same name in the plugin directory:
-  - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/gimp_msx_g4`;
-  - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp_msx_g4`;
+- For GIMP 3.XX, put `gimp3_msx_g4.py` in a subdirectory with the same name in the plugin directory:
+  - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
+  - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
 - Restart GIMP
 
 ## Loading SC5 files
