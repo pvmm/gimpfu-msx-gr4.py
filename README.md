@@ -1,4 +1,4 @@
-# gimpfu-msx-gr4.py
+# gimp-msx-g4.py
 
 ![Options dialog](images/dialog.png "Options dialog")
 
