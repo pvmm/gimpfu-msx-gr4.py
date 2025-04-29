@@ -15,10 +15,13 @@
 
 import gi
 gi.require_version('Gimp', '3.0')
+
 from gi.repository import Gimp
 gi.require_version('GimpUi', '3.0')
+
 from gi.repository import GimpUi
 gi.require_version('Gegl', '0.4')
+
 from gi.repository import Gegl
 from gi.repository import GObject
 from gi.repository import GLib
@@ -81,15 +84,13 @@ def compress_rgba(pixel):
 def scatter_noise(plugin, x, y, error):
     NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
     for offset_x, offset_y, debt in NEIGHBORS:
-        with suppress(IndexError):
-            off_x, off_y = x + offset_x, y + offset_y
-            if off_x < 0 or off_y < 0 or off_x >= plugin.width or off_y >= plugin.height:
-                continue
-            c = plugin.get_pixel(off_x, off_y)
-            d = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(c[0:3], error[0:3]))
-            print("error14 =", error, c, d)
-            #print 'pos:', (off_x + 255 * off_y), " c/d:", c, d
-            plugin.set_pixel(off_x, off_y, d)
+        off_x, off_y = x + offset_x, y + offset_y
+        if off_x < 0 or off_y < 0 or off_x >= plugin.width or off_y >= plugin.height:
+            continue
+        pixel = plugin.get_pixel(off_x, off_y)[0:3]
+        npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
+        #print('pos:', (off_x, off_y), ':', pixel, '->', npixel)
+        plugin.set_pixel(off_x, off_y, npixel + (, 255))
 
 
 def downsampling(plugin, trans_color, dithering):
@@ -97,7 +98,7 @@ def downsampling(plugin, trans_color, dithering):
     for y in range(plugin.height):
         for x in range(plugin.width):
             c = plugin.get_pixel(x, y)
-            if c != trans_color:
+            if c[0:3] != trans_color[0:3]:
                 d = compress_rgba(c)
                 plugin.set_pixel(x, y, d)
                 if dithering:
@@ -205,7 +206,7 @@ def convert(plugin, *args):
 def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, trans_color, encoding, pal_file):
     # transparent color ignored if not required
     if not skip_index0:
-        trans_color = None
+        trans_color = [None, None, None]
         max_colors = MAX_COLORS
     else:
         max_colors = MAX_COLORS - 1
@@ -227,7 +228,7 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
     used_transparency, colormap = preprocess_image(plugin, trans_color)
     if not used_transparency:
         # transparent color ignored if not used
-        trans_color = None
+        trans_color = [None, None, None]
     else:
         # disable dithering when transparency is used
         dithering = 0
@@ -235,7 +236,6 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
     downsampling(plugin, trans_color, dithering)
     histogram = create_histogram(plugin, trans_color)
     palette = quantize_colors(plugin, histogram, max_colors)
-    print("palette =", palette)
     query = create_distance_query(palette)
 
     for (r, g, b), index in palette:
@@ -254,7 +254,6 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
     plugin.set_progress(text=_("Exporting image to {} format...").format(_(encoding)));
 
     if encoding == 'no-output':
-        print("encoding1 =", palette)
         # Export 16 color palette
         if pal_file:
             with open(os.path.join(folder, '%s.TXT' % filename), 'wt') as file:
@@ -266,11 +265,9 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         for y in range(plugin.height):
             for x in range(plugin.width):
                 c = plugin.get_pixel(x, y)
-                if c == trans_color:
-                    r, g, b, __ = trans_color
-                else:
-                    __, (r, g, b) = query((c[0], c[1], c[2]))
-                #print("query = ", c[0:3], '->', (r, g, b))
+                if c[0:3] != trans_color[0:3]:
+                    index, (r, g, b) = query((c[0], c[1], c[2]))
+                #print("query = ", c[0:3], '->', (r, g, b), '[', index, ']')
                 plugin.set_pixel(x, y, (r, g, b, 255))
             plugin.set_progress(y/plugin.height)
         # Display the duplicated image
@@ -343,7 +340,6 @@ class Graph4Exporter (Gimp.PlugIn):
         return procedure
 
     def run(self, procedure, run_mode, image, drawables, config, run_data):
-        print(f"layer name: {drawables[0].get_name()}")
         if len(drawables) != 1:
             msg = _("Procedure '{}' only works with one drawable.").format(procedure.get_name())
             error = GLib.Error.new_literal(Gimp.PlugIn.error_quark(), msg, 0)
@@ -354,7 +350,6 @@ class Graph4Exporter (Gimp.PlugIn):
                 self.image = image.duplicate()
                 drawables = self.image.get_layers()
                 drawables[0].add_alpha()
-                print(f"Added alpha to layer: {self.drawable.get_name()}")
             self.image = image
             self.drawable = drawables[0]
 
@@ -542,17 +537,10 @@ class Graph4Exporter (Gimp.PlugIn):
 
     def update_drawable(self, drawable, buf):
         """buf parameter is a list of (r, g, b, a) of the whole image."""
-        old = self.drawable.get_buffer().get(Gegl.Rectangle.new(0, 0, self.drawable.get_width(), self.drawable.get_height()),
-            1.0, "RGBA u8", Gegl.AUTO_ROWSTRIDE)
-        tmp = [tuple(old[i : i + 4]) for i in range(0, len(old), 4)]
-        flat_list = [channel for pixel in tmp for channel in pixel]
-        print('tmp =', flat_list[0:20])
-
         buffer = drawable.get_buffer()
         # convert back list of tuples of 4 bytes to bytearray
         flat_list = [channel for pixel in buf for channel in pixel]
-        print('buf =', flat_list[0:20])
-        buffer.set(Gegl.Rectangle.new(0, 0, drawable.get_width(), drawable.get_height()), "RGBA u8",
+        buffer.set(Gegl.Rectangle.new(0, 0, drawable.get_width(), drawable.get_height()), "R'G'B'A u8",
             bytearray(flat_list))
 
     def done(self, *args):
@@ -562,13 +550,12 @@ class Graph4Exporter (Gimp.PlugIn):
 
 class PluginConnector:
     def __init__(self, plugin):
-        drawable = plugin.image.get_layers()[0]
         self.plugin = plugin                    # will never call it directly
-        self.width = drawable.get_width()
-        self.height = drawable.get_height()
+        self.width = plugin.drawable.get_width()
+        self.height = plugin.drawable.get_height()
         # convert bytearray buffer in list of tuples of 4 bytes
-        tmp = drawable.get_buffer().get(Gegl.Rectangle.new(0, 0, self.width, self.height),
-            1.0, "RGBA u8", Gegl.AUTO_ROWSTRIDE)
+        tmp = plugin.drawable.get_buffer().get(Gegl.Rectangle.new(0, 0, self.width, self.height),
+            1.0, "R'G'B'A u8", Gegl.AUTO_ROWSTRIDE)
         self.buffer = [tuple(tmp[i : i + 4]) for i in range(0, len(tmp), 4)]
 
     def set_progress(self, fraction=0.0, text=None, status=None):
