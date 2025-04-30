@@ -5,8 +5,8 @@ Created on 2021/11/30
 @author: Pedro de Medeiros <pedro.medeiros@gmail.com>
 
 Installation: 
-    - For GIMP2, put this file into your GIMP plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp2_msx_gr4.py
-    - For GIMP3, put this file inside a subdirectory with the same name in your plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_gr4/gimp3_msx_gr4.py
+    - For GIMP2, put this file into your GIMP plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp2_msx_g4.py
+    - For GIMP3, put this file inside a subdirectory with the same name in your plugin directory, i.e. ~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_g4/gimp3_msx_g4.py
     - Restart Gimp
     - Run script via Filters/MSX/Export GRAPHICS 4 bitmap...
 '''
@@ -139,7 +139,7 @@ def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
     return []
 
 
-def write_gr4_alpha(image, layer, filename, folder, dithering, exp_pal, image_enc, exp_ptp):
+def write_g4_alpha(image, layer, filename, folder, dithering, exp_pal, image_enc, exp_ptp):
     '''
     Export image with alpha to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -152,10 +152,10 @@ def write_gr4_alpha(image, layer, filename, folder, dithering, exp_pal, image_en
     @param image_enc: output encoding
     @param exp_ptp: export plain-text-palette data too
     '''
-    write_gr4(image, layer, filename, folder, dithering, exp_pal, True, False, image_enc, exp_ptp)
+    write_g4(image, layer, filename, folder, dithering, exp_pal, True, False, image_enc, exp_ptp)
 
 
-def write_gr4(image, layer, filename, folder, dithering, exp_pal, has_transparency, trans_color, image_enc, exp_ptp):
+def write_g4(image, layer, filename, folder, dithering, exp_pal, has_transparency, trans_color, image_enc, exp_ptp):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -447,7 +447,7 @@ def downsampling(plugin, image, use_transparent = False, dithering = True):
     return drawable
 
 
-gimpfu.register("msx_gr4_exporter",
+gimpfu.register("msx_g4_exporter",
                 "Export GRAPHICS 4 bitmap (a.k.a. SCREEN 5 in BASIC)",
                 "Export MSX-compatible image",
                 "Pedro de Medeiros", "Pedro de Medeiros", "2021-2025",
@@ -468,9 +468,9 @@ gimpfu.register("msx_gr4_exporter",
                     (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
                 ],
                 [],
-                write_gr4)
+                write_g4)
 
-gimpfu.register("msx_gr4_exporter_alpha",
+gimpfu.register("msx_g4_exporter_alpha",
                 "Export MSX2 GRAPHICS 4 bitmap with alpha (a.k.a. SCREEN 5 in BASIC)",
                 "Export MSX-compatible image",
                 "Pedro de Medeiros", "Pedro de Medeiros", "2021-2025",
@@ -489,6 +489,6 @@ gimpfu.register("msx_gr4_exporter_alpha",
                     (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
                 ],
                 [],
-                write_gr4_alpha)
+                write_g4_alpha)
 
 gimpfu.main()
