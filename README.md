@@ -13,14 +13,14 @@ Plug-in is accessible through _Filters > MSX >> MSX2 Graphics 4 Image Converter_
 
 ### Meaning of input fields
 
-* Input transparent color: if the source image doesn't have any transparency, consider this colour the transparent colour when converting image to the MSX (index 0). This requires "Reserve index 0 as transparency" to be active.
-* Reserve index 0 as transparency: the plugin can optionally use the colour index 0 as a normal colour and improve dithering a little bit if you disable this.
+* Input transparent color: if the source image doesn't have any transparency, consider this colour the transparent colour when converting image to the MSX (set index to 0). This requires "Reserve index 0 as transparency" to be active.
+* Reserve index 0 as transparency: the plugin can optionally use the colour index 0 as a normal colour and get one more usable colour. It may improve dithering a little bit if disabled.
 * Image encoding: common MSX image formats the plugin recognises.
 
 ### Latest changes
 
-* The plugin now detects if a predefined transparent colour is being used and force it to index 0. "Reserve index 0 as transparency" must be activated. 
-* The plugin now uses the alpha channel of RGBA images as transparent colour automatically (second option in the filter menu).
+* The plugin now detects if a predefined transparent colour is being used (alpha=0) and force it to index 0. "Reserve index 0 as transparency" must be activated.
+* New GIMP3 plugin version added.
 
 ## Original vs sample image
 
@@ -35,7 +35,7 @@ Plug-in is accessible through _Filters > MSX >> MSX2 Graphics 4 Image Converter_
 - For GIMP 2, put `gimp2_msx_g4.py` in your GIMP plugin directory:
   - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/`;
   - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
-- For GIMP 3, put `gimp3_msx_g4.py` in a subdirectory with the same name in the plugin directory:
+- For GIMP 3, put `gimp3_msx_g4.py` in a subdirectory WITH THE SAME NAME (seriously, it will not detect the plugin otherwise) in the plugin directory:
   - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
   - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
 - Restart GIMP
