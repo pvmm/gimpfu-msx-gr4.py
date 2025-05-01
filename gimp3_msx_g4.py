@@ -498,22 +498,14 @@ class Graph4Exporter (Gimp.PlugIn):
                 return procedure.new_return_values(*result)
 
     def convert(self, *args):
-        from gi.repository import Gtk
-        self.dialog = Gtk.Dialog(
-            title="MSX Graphics 4 Image Converter Progress",
-            use_header_bar=False,
-            transient_for=None,
-            role="msx-graph4-exporter-progress",
-            flags=0,
-        )
-        self.dialog.set_modal(True)
-
         # Run code in a different thread
         threading.Thread(target=convert, args=args).start()
 
-        # block interface until done
-        self.dialog.show_all()
-        self.dialog.run()
+        # block response until done
+        from gi.repository import Gtk
+        while self.status == UNFINISHED:
+            Gtk.main_iteration_do(True)
+
         if self.status == UNFINISHED:
             return (Gimp.PDBStatusType.SUCCESS, GLib.Error())
         if self.status == ERROR:
@@ -541,7 +533,6 @@ class Graph4Exporter (Gimp.PlugIn):
 
     def done(self, *args):
         self.status, self.done_args = args
-        self.dialog.destroy()
 
 
 class PluginConnector:
