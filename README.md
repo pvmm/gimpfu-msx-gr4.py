@@ -36,8 +36,8 @@ Plug-in is accessible through _Filters > MSX >> MSX2 Graphics 4 Image Converter_
   - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/`;
   - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/`;
 - For GIMP 3, put `gimp3_msx_g4.py` in a subdirectory WITH THE SAME NAME (seriously, it will not detect the plugin otherwise) in the plugin directory:
-  - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
-  - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_g4`;
+  - if you installed as a normal package, it's `~/.config/GIMP/2.10/plug-ins/gimp3_msx_g4/`;
+  - if you installed as a flatpak package, it's `~/.var/app/org.gimp.GIMP/config/GIMP/2.10/plug-ins/gimp3_msx_g4/`;
 - Restart GIMP
 
 ## Loading SC5 files
