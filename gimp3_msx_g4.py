@@ -37,6 +37,7 @@ import traceback
 
 
 # constants
+NOTRANS = (None, None, None, None)  # ignored, use a colour that will never match
 MAX_COLORS = 16
 MAX_WIDTH = 256
 MAX_HEIGHT = 256
@@ -185,7 +186,7 @@ def preprocess_image(plugin, trans_color):
             if not a in (0, 255):
                 raise InvalidAlphaValueError(_("Invalid alpha value {} (0 or 255 expected).").format(a))
             elif a == 0:
-                if not trans_color:
+                if trans_color != NOTRANS:
                     raise NoTransparentColor(_("Transparent pixel not expected but found in image."))
                 plugin.set_pixel(x, y, trans_color)
                 colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
@@ -208,7 +209,7 @@ def convert(plugin, *args):
 def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, trans_color, encoding, pal_file):
     # transparent color ignored if not required
     if not skip_index0:
-        trans_color = [None, None, None]
+        trans_color = NOTRANS
         max_colors = MAX_COLORS
     else:
         max_colors = MAX_COLORS - 1
@@ -229,8 +230,7 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
 
     used_transparency, colormap = preprocess_image(plugin, trans_color)
     if not used_transparency:
-        # transparent color ignored if not used (select a value that will never match)
-        trans_color = (None, None, None, None)
+        trans_color = NOTRANS
     else:
         # disable dithering when transparency is used
         dithering = 0
