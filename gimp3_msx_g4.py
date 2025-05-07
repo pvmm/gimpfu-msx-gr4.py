@@ -71,7 +71,7 @@ def on_combo_changed(combo, affected_element):
     affected_element.set_sensitive(False if combo.get_active() == 1 else True)
 
 
-def normalize(color):
+def denormalize(color):
     return int(color.red * 255), int(color.green * 255), int(color.blue * 255), int(color.alpha * 255)
 
 
@@ -96,6 +96,7 @@ def scatter_noise(plugin, x, y, error):
 
 def downsampling(plugin, trans_color, dithering):
     plugin.set_progress(text=_("Downsampling..."))
+    trans_color = trans_color[0:3] + (255,)
     for y in range(plugin.height):
         for x in range(plugin.width):
             c = plugin.get_pixel(x, y)
@@ -115,7 +116,7 @@ def create_histogram(plugin, trans_color):
     for y in range(plugin.height):
         for x in range(plugin.width):
             c = plugin.get_pixel(x, y)
-            if c == trans_color: continue
+            if c[0:3] == trans_color[0:3]: continue
             histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
         plugin.set_progress(y / plugin.height)
     return histogram.items()
@@ -228,8 +229,8 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
 
     used_transparency, colormap = preprocess_image(plugin, trans_color)
     if not used_transparency:
-        # transparent color ignored if not used
-        trans_color = [None, None, None]
+        # transparent color ignored if not used (select a value that will never match)
+        trans_color = (None, None, None, None)
     else:
         # disable dithering when transparency is used
         dithering = 0
@@ -265,10 +266,10 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         buffer = [0] * plugin.width * plugin.height
         for y in range(plugin.height):
             for x in range(plugin.width):
-                c = plugin.get_pixel(x, y)
-                if c[0:3] != trans_color[0:3]:
-                    index, (r, g, b) = query((c[0], c[1], c[2]))
-                #print("query = ", c[0:3], '->', (r, g, b), '[', index, ']')
+                r, g, b, a = plugin.get_pixel(x, y)
+                # keep transparent colour selected since this is not the MSX.
+                if (r, g, b) != trans_color[0:3]:
+                    index, (r, g, b) = query((r, g, b))
                 plugin.set_pixel(x, y, (r, g, b, 255))
             plugin.set_progress(y/plugin.height)
         # Display the duplicated image
@@ -291,7 +292,7 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         for y in range(plugin.height):
             for x in range(plugin.width):
                 c = plugin.get_pixel(x, y)
-                if c == trans_color:
+                if c[0:3] == trans_color[0:3]:
                     # index of transparent color is always 0
                     index = 0
                 else:
@@ -483,7 +484,7 @@ class Graph4Exporter (Gimp.PlugIn):
                 dithering_value = dithering_combo.get_active()
                 export_value = export_combo.get_active()
                 index0_value = index0_combo.get_active()
-                trans_color = normalize(trans_button.get_rgba())
+                trans_color = denormalize(trans_button.get_rgba())
                 encoding_value = ENC_GROUP[[item.get_active() for item in radio_box.get_children()].index(1)]
                 pal_value = pal_combo.get_active()
                 dialog.destroy()
