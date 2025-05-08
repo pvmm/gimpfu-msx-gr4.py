@@ -96,6 +96,7 @@ def scatter_noise(connector, x, y, error):
 
 
 def downsampling(connector, trans_color, dithering):
+    global _
     connector.set_progress(text=_("Downsampling..."))
     trans_color = trans_color[0:3] + (255,)
     for y in range(connector.height):
@@ -112,6 +113,7 @@ def downsampling(connector, trans_color, dithering):
 
 
 def create_histogram(connector, trans_color):
+    global _
     histogram = {}
     connector.set_progress(text=_('Creating histogram...'))
     for y in range(connector.height):
@@ -135,6 +137,7 @@ tuple_value = lambda pair: pair[1]
 
 def quantize_colors(connector, histogram, length):
     """Group similar colours reducing palette to "length"."""
+    global _
     palette = []
     hist = list(histogram)
     connector.set_progress(text=_("Quantizing colors..."))
@@ -146,15 +149,15 @@ def quantize_colors(connector, histogram, length):
         # Get least frequent item and its nearest cousin by colour
         color1, freq = hist.pop(0)
         distances = [
-            (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(hist[1:], start=1)
+            (idx, distance(color1, color2)) for idx, (color2, ignored) in enumerate(hist[1:], start=1)
         ]
-        index, __ = min(distances, key=tuple_value)
+        index, ignored = min(distances, key=tuple_value)
 
         # add removed item's frequency into nearest cousin's frequency
         hist[index] = (hist[index][0], hist[index][1] + freq)
         connector.set_progress(len(hist) / length)
 
-    for index, (color, _) in enumerate(sorted(hist, key=tuple_key)):
+    for index, (color, ignored) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
     return palette
 
@@ -177,6 +180,7 @@ def create_distance_query(palette):
 
 def preprocess_image(connector, trans_color):
     """Pre-process image and gather all used colors."""
+    global _
     colormap = {}
     used_transparency = False
     connector.set_progress(text=_("Pre-processing image..."))
@@ -212,6 +216,7 @@ def convert(connector, *args):
         connector.throw(message)
 
 def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, trans_color, encoding, pal_file):
+    global _
     # transparent color ignored if not required
     if not skip_index0:
         trans_color = NOTRANS
@@ -258,14 +263,14 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
         with open(os.path.join(folder, '%s.PAL' % filename), 'wb') as file:
             file.write(encoded)
 
-    connector.set_progress(text=_("Exporting image to {} format...").format(_(encoding)));
+    connector.set_progress(text=_("Exporting image to {} format...").format(_(encoding)))
 
     if encoding == 'no-output':
         # Export 16 color palette
         if pal_file:
             with open(os.path.join(folder, '%s.TXT' % filename), 'wt') as file:
                 print("16-color palette:", file=file)
-                for i, ((r, g, b), __) in enumerate(palette):
+                for i, ((r, g, b), ignored) in enumerate(palette):
                     print('%i: %i, %i, %i' % (i, r, g, b), file=file)
         # complete buffer
         buffer = [0] * connector.width * connector.height
@@ -301,7 +306,7 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
                     # index of transparent color is always 0
                     index = 0
                 else:
-                    index, __ = query((c[0], c[1], c[2]))
+                    index, ignored = query((c[0], c[1], c[2]))
                     index += skip_index0
                 pos = x // 2 + y * (connector.width // 2)
                 buffer[pos] |= index if x % 2 else index << 4;
