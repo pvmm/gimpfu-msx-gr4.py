@@ -60,11 +60,14 @@ def N_(message): return message
 def _(message): return GLib.dgettext(None, message)
 
 
+# error types
 class InvalidAlphaValueError(Exception):
     pass
 
-
 class ImageFormatError(Exception):
+    pass
+
+class NoTransparentColorError(Exception):
     pass
 
 
@@ -83,43 +86,43 @@ def compress_rgba(pixel):
     return (r, g, b, 255)
 
 
-def scatter_noise(plugin, x, y, error):
+def scatter_noise(connector, x, y, error):
     NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
     for offset_x, offset_y, debt in NEIGHBORS:
         off_x, off_y = x + offset_x, y + offset_y
-        if off_x < 0 or off_y < 0 or off_x >= plugin.width or off_y >= plugin.height:
+        if off_x < 0 or off_y < 0 or off_x >= connector.width or off_y >= connector.height:
             continue
-        pixel = plugin.get_pixel(off_x, off_y)[0:3]
+        pixel = connector.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
         #print('pos:', (off_x, off_y), ':', pixel, '->', npixel)
-        plugin.set_pixel(off_x, off_y, npixel + (255,))
+        connector.set_pixel(off_x, off_y, npixel + (255,))
 
 
-def downsampling(plugin, trans_color, dithering):
-    plugin.set_progress(text=_("Downsampling..."))
+def downsampling(connector, trans_color, dithering):
+    connector.set_progress(text=_("Downsampling..."))
     trans_color = trans_color[0:3] + (255,)
-    for y in range(plugin.height):
-        for x in range(plugin.width):
-            c = plugin.get_pixel(x, y)
+    for y in range(connector.height):
+        for x in range(connector.width):
+            c = connector.get_pixel(x, y)
             if c[0:3] != trans_color[0:3]:
                 d = compress_rgba(c)
-                plugin.set_pixel(x, y, d)
+                connector.set_pixel(x, y, d)
                 if dithering:
                     # ignore alpha channel in c and d
                     error = [old - new for old, new in zip(c[0:3], d[0:3])]
-                    scatter_noise(plugin, x, y, error)
-        plugin.set_progress(y / plugin.height)
+                    scatter_noise(connector, x, y, error)
+        connector.set_progress(y / connector.height)
 
 
-def create_histogram(plugin, trans_color):
+def create_histogram(connector, trans_color):
     histogram = {}
-    plugin.set_progress(text=_('Creating histogram...'))
-    for y in range(plugin.height):
-        for x in range(plugin.width):
-            c = plugin.get_pixel(x, y)
+    connector.set_progress(text=_('Creating histogram...'))
+    for y in range(connector.height):
+        for x in range(connector.width):
+            c = connector.get_pixel(x, y)
             if c[0:3] == trans_color[0:3]: continue
             histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
-        plugin.set_progress(y / plugin.height)
+        connector.set_progress(y / connector.height)
     return histogram.items()
 
 
@@ -133,11 +136,11 @@ tuple_key = lambda pair: pair[0]
 tuple_value = lambda pair: pair[1]
 
 
-def quantize_colors(plugin, histogram, length):
+def quantize_colors(connector, histogram, length):
     """Group similar colours reducing palette to "length"."""
     palette = []
     hist = list(histogram)
-    plugin.set_progress(text="Quantizing colors...")
+    connector.set_progress(text="Quantizing colors...")
     while len(hist) > length:
         # Order histogram by color usage (this is slooooooow!)
         hist = sorted(hist, key=tuple_value)
@@ -152,7 +155,7 @@ def quantize_colors(plugin, histogram, length):
 
         # add removed item's frequency into nearest cousin's frequency
         hist[index] = (hist[index][0], hist[index][1] + freq)
-        plugin.set_progress(len(hist) / length)
+        connector.set_progress(len(hist) / length)
 
     for index, (color, _) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
@@ -175,38 +178,43 @@ def create_distance_query(palette):
     return query_index
 
 
-def preprocess_image(plugin, trans_color):
+def preprocess_image(connector, trans_color):
     """Pre-process image and gather all used colors."""
     colormap = {}
     used_transparency = False
-    plugin.set_progress(text=_("Pre-processing image..."))
-    for y in range(0, plugin.height):
-        for x in range(0, plugin.width):
-            r, g, b, a = plugin.get_pixel(x, y)
+    connector.set_progress(text=_("Pre-processing image..."))
+    for y in range(0, connector.height):
+        for x in range(0, connector.width):
+            r, g, b, a = connector.get_pixel(x, y)
             if not a in (0, 255):
                 raise InvalidAlphaValueError(_("Invalid alpha value {} (0 or 255 expected).").format(a))
             elif a == 0:
-                if trans_color != NOTRANS:
-                    raise NoTransparentColor(_("Transparent pixel not expected but found in image."))
-                plugin.set_pixel(x, y, trans_color)
+                if trans_color == NOTRANS:
+                    raise NoTransparentColorError(_("Transparent pixel not expected but found in image."))
+                connector.set_pixel(x, y, trans_color)
                 colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
                 used_transparency = 1
             elif (r, g, b) == trans_color:
                 used_transparency = 1
             else:
                 colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
-        plugin.set_progress(y / plugin.height)
+        connector.set_progress(y / connector.height)
     return used_transparency, colormap
 
 
-def convert(plugin, *args):
+def convert(connector, *args):
     try:
-        do_convert(plugin, *args)
+        do_convert(connector, *args)
+    except (InvalidAlphaValueError, ImageFormatError, NoTransparentColorError) as e:
+        print("got error: %s" % str(e), file=sys.stderr)
+        message = ''.join(str(e))
+        connector.throw(message)
     except Exception as e:
+        print("got error: %s" % str(e), file=sys.stderr)
         message = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-        plugin.throw(message)
+        connector.throw(message)
 
-def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, trans_color, encoding, pal_file):
+def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, trans_color, encoding, pal_file):
     # transparent color ignored if not required
     if not skip_index0:
         trans_color = NOTRANS
@@ -214,30 +222,30 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
     else:
         max_colors = MAX_COLORS - 1
 
-    if not encoding in ("DAT", "no-output") and plugin.width != MAX_WIDTH:
-        raise ImageFormatError(_("Width should be exactly 256 (currently {}) for this image type.").format(plugin.width))
-    elif encoding != "no-output" and plugin.width > MAX_WIDTH:
-        raise ImageFormatError(_("Width should not be greater than 256 (currently {}) for this image type.").format(plugin.width))
-    elif encoding != "no-output" and plugin.height > MAX_HEIGHT:
-        raise ImageFormatError(_("Height should not be greater than 256 (currently {}) for this image type.").format(plugin.height))
+    if not encoding in ("DAT", "no-output") and connector.width != MAX_WIDTH:
+        raise ImageFormatError(_("Width should be exactly 256 (currently {}) for this image type.").format(connector.width))
+    elif encoding != "no-output" and connector.width > MAX_WIDTH:
+        raise ImageFormatError(_("Width should not be greater than 256 (currently {}) for this image type.").format(connector.width))
+    elif encoding != "no-output" and connector.height > MAX_HEIGHT:
+        raise ImageFormatError(_("Height should not be greater than 256 (currently {}) for this image type.").format(connector.height))
 
-    if plugin.height > MAX_HEIGHT * MAX_PAGES:
+    if connector.height > MAX_HEIGHT * MAX_PAGES:
         raise ImageFormatError(_("Height must not be greater than {}.").format(MAX_HEIGHT * MAX_PAGES))
 
     # create palette data
     pal9bits = [0] * 2 * MAX_COLORS
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
-    used_transparency, colormap = preprocess_image(plugin, trans_color)
+    used_transparency, colormap = preprocess_image(connector, trans_color)
     if not used_transparency:
         trans_color = NOTRANS
     else:
         # disable dithering when transparency is used
         dithering = 0
     # downsampling happens in place
-    downsampling(plugin, trans_color, dithering)
-    histogram = create_histogram(plugin, trans_color)
-    palette = quantize_colors(plugin, histogram, max_colors)
+    downsampling(connector, trans_color, dithering)
+    histogram = create_histogram(connector, trans_color)
+    palette = quantize_colors(connector, histogram, max_colors)
     query = create_distance_query(palette)
 
     for (r, g, b), index in palette:
@@ -253,7 +261,7 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         with open(os.path.join(folder, '%s.PAL' % filename), 'wb') as file:
             file.write(encoded)
 
-    plugin.set_progress(text=_("Exporting image to {} format...").format(_(encoding)));
+    connector.set_progress(text=_("Exporting image to {} format...").format(_(encoding)));
 
     if encoding == 'no-output':
         # Export 16 color palette
@@ -263,17 +271,17 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
                 for i, ((r, g, b), __) in enumerate(palette):
                     print('%i: %i, %i, %i' % (i, r, g, b), file=file)
         # complete buffer
-        buffer = [0] * plugin.width * plugin.height
-        for y in range(plugin.height):
-            for x in range(plugin.width):
-                r, g, b, a = plugin.get_pixel(x, y)
+        buffer = [0] * connector.width * connector.height
+        for y in range(connector.height):
+            for x in range(connector.width):
+                r, g, b, a = connector.get_pixel(x, y)
                 # keep transparent colour selected since this is not the MSX.
                 if (r, g, b) != trans_color[0:3]:
                     index, (r, g, b) = query((r, g, b))
-                plugin.set_pixel(x, y, (r, g, b, 255))
-            plugin.set_progress(y/plugin.height)
+                connector.set_pixel(x, y, (r, g, b, 255))
+            connector.set_progress(y/connector.height)
         # Display the duplicated image
-        plugin.set_progress(status=(DUPLICATE, plugin.buffer))
+        connector.set_progress(status=(DUPLICATE, connector.buffer))
     else:
         # Export MSX2 palette
         if pal_file:
@@ -285,22 +293,22 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         # complete buffer
         if encoding == 'SC5':
             # make sure to save space for inner palette
-            buffer = [0] * max(LAST_PALETTE_POS, (plugin.width // 2) * plugin.height)
+            buffer = [0] * max(LAST_PALETTE_POS, (connector.width // 2) * connector.height)
         else:
-            buffer = [0] * (plugin.width // 2) * plugin.height
+            buffer = [0] * (connector.width // 2) * connector.height
 
-        for y in range(plugin.height):
-            for x in range(plugin.width):
-                c = plugin.get_pixel(x, y)
+        for y in range(connector.height):
+            for x in range(connector.width):
+                c = connector.get_pixel(x, y)
                 if c[0:3] == trans_color[0:3]:
                     # index of transparent color is always 0
                     index = 0
                 else:
                     index, __ = query((c[0], c[1], c[2]))
                     index += skip_index0
-                pos = x // 2 + y * (plugin.width // 2)
+                pos = x // 2 + y * (connector.width // 2)
                 buffer[pos] |= index if x % 2 else index << 4;
-            plugin.set_progress(y/plugin.height)
+            connector.set_progress(y/connector.height)
 
         # Embed palette into image data (SC5 only)
         if encoding == 'SC5':
@@ -310,13 +318,13 @@ def do_convert(plugin, filename, folder, dithering, export_pal, skip_index0, tra
         if encoding == 'RAW':
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
         elif encoding == 'DAT':
-            encoded = struct.pack('<HH{}B'.format(plugin.width * plugin.height // 2), plugin.width, plugin.height, *buffer)
+            encoded = struct.pack('<HH{}B'.format(connector.width * connector.height // 2), connector.width, connector.height, *buffer)
         else:
             encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
         with open(os.path.join(folder, '%s.%s' % (filename, encoding)), 'wb') as file:
             file.write(encoded)
         # Doing this instead of returning
-        plugin.set_progress(status=(SUCCESS, None))
+        connector.set_progress(status=(SUCCESS, None))
 
 
 class Graph4Exporter (Gimp.PlugIn):
@@ -537,10 +545,12 @@ class Graph4Exporter (Gimp.PlugIn):
 
 
 class PluginConnector:
+    """Connector object that interfaces with GIMP plugin."""
     def __init__(self, plugin):
         self.plugin = plugin                    # will never call it directly
-        self.width = plugin.drawable.get_width()
-        self.height = plugin.drawable.get_height()
+        # In screen 5 only even sizes are permitted.
+        self.width = plugin.drawable.get_width() & ~1
+        self.height = plugin.drawable.get_height() & ~1
         # convert bytearray buffer in list of tuples of 4 bytes
         tmp = plugin.drawable.get_buffer().get(Gegl.Rectangle.new(0, 0, self.width, self.height),
             1.0, "R'G'B'A u8", Gegl.AUTO_ROWSTRIDE)
