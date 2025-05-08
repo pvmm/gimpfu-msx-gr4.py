@@ -61,14 +61,11 @@ def _(message): return GLib.dgettext(None, message)
 
 
 # error types
-class InvalidAlphaValueError(Exception):
-    pass
+class InvalidAlphaValueError(Exception): pass
 
-class ImageFormatError(Exception):
-    pass
+class ImageFormatError(Exception): pass
 
-class NoTransparentColorError(Exception):
-    pass
+class NoTransparentColorError(Exception): pass
 
 
 def on_combo_changed(combo, affected_element):
