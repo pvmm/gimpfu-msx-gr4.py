@@ -19,6 +19,7 @@ Plug-in is accessible through _Filters > MSX >> MSX2 Graphics 4 Image Converter_
 
 ### Latest changes
 
+* GIMP2 plug-in version got a speed boost;
 * The plugin now detects if a predefined transparent colour is being used (alpha=0) and force it to index 0. "Reserve index 0 as transparency" must be activated.
 * New GIMP3 plugin version added.
 
@@ -83,8 +84,9 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 
 ## TODO
 
+* [ ] allow different palette conversion functions;
 * [ ] ordered dithering;
-* [x] make it faster (GIMP3 version);
+* [x] make it faster;
 * [x] enable or disable transparent colour;
 * [x] palette export;
 * [x] RGB to indexed conversion;
@@ -96,4 +98,3 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 * [ ] RLE encoding;
 * [ ] aPLib compression;
 * [ ] converting layers into pages;
-
