@@ -76,10 +76,10 @@ def denormalize(color):
     return int(color.red * 255), int(color.green * 255), int(color.blue * 255), int(color.alpha * 255)
 
 
-def compress_rgba(pixel):
-    r = int(round(float(pixel[0]) / 0xff * 7)) << 5
-    g = int(round(float(pixel[1]) / 0xff * 7)) << 5
-    b = int(round(float(pixel[2]) / 0xff * 7)) << 5
+def compress_rgb(r, g, b, a=255):
+    r = int(round(float(r) / 0xff * 7)) << 5
+    g = int(round(float(g) / 0xff * 7)) << 5
+    b = int(round(float(b) / 0xff * 7)) << 5
     return (r, g, b, 255)
 
 
@@ -101,12 +101,12 @@ def downsampling(connector, trans_color, dithering):
     trans_color = trans_color[0:3] + (255,)
     for y in range(connector.height):
         for x in range(connector.width):
-            c = connector.get_pixel(x, y)
-            if c[0:3] != trans_color[0:3]:
-                d = compress_rgba(c)
+            r, g, b, a = connector.get_pixel(x, y)
+            if (r, g, b) != trans_color[0:3]:
+                d = compress_rgb(r, g, b)
                 connector.set_pixel(x, y, d)
                 if dithering:
-                    # ignore alpha channel in c and d
+                    # ignore alpha channel in both pixels
                     error = [old - new for old, new in zip(c[0:3], d[0:3])]
                     scatter_noise(connector, x, y, error)
         connector.set_progress(y / connector.height)
