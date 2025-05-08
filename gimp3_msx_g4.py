@@ -140,7 +140,7 @@ def quantize_colors(connector, histogram, length):
     """Group similar colours reducing palette to "length"."""
     palette = []
     hist = list(histogram)
-    connector.set_progress(text="Quantizing colors...")
+    connector.set_progress(text=_("Quantizing colors..."))
     while len(hist) > length:
         # Order histogram by color usage (this is slooooooow!)
         hist = sorted(hist, key=tuple_value)
@@ -194,7 +194,7 @@ def preprocess_image(connector, trans_color):
                 connector.set_pixel(x, y, trans_color)
                 colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
                 used_transparency = 1
-            elif (r, g, b) == trans_color:
+            elif (r, g, b) == trans_color[0:3]:
                 used_transparency = 1
             else:
                 colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
