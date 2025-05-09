@@ -104,15 +104,15 @@ class PluginConnector:
             gimpfu.pdb.gimp_progress_init(text, None)
 
 
-def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
+def check_params(image, filename, folder, encoding, exp_pal, paltxt_file):
     drawable = gimpfu.pdb.gimp_image_active_drawable(image)
     width, height = gimpfu.pdb.gimp_drawable_width(drawable), gimpfu.pdb.gimp_drawable_height(drawable)
     errors = []
-    if image_enc != 'no-output':
-        if os.path.exists(os.path.join(folder, '%s.%s' % (filename, image_enc))):
-            errors.append('Output file "%s.%s" already exists.' % (filename, image_enc))
+    if encoding != 'no-output':
+        if os.path.exists(os.path.join(folder, '%s.%s' % (filename, encoding))):
+            errors.append('Output file "%s.%s" already exists.' % (filename, encoding))
 
-        if image_enc == 'DAT':
+        if encoding == 'DAT':
             if width > MAX_WIDTH:
                 errors.append('Drawable width must be less than or equal to %i.' % MAX_WIDTH)
             if height > MAX_DAT_HEIGHT:
@@ -124,20 +124,20 @@ def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
     if exp_pal and os.path.exists(os.path.join(folder, '%s.PAL' % filename)):
         errors.append('Output palette "%s.PAL" file already exists.' % filename)
 
-    if exp_ptp and os.path.exists(os.path.join(folder, '%s.TXT' % filename)):
+    if paltxt_file and os.path.exists(os.path.join(folder, '%s.TXT' % filename)):
         errors.append('Output plain text palette "%s.TXT" file already exists.' % filename)
 
     if height > MAX_HEIGHT * MAX_PAGES:
         errors.append('Drawable height must not be bigger than %i.' % (MAX_HEIGHT * MAX_PAGES))
 
-    if image_enc in ('RLE', 'aPLib'):
+    if encoding in ('RLE', 'aPLib'):
         errors.append('compression is not implemented yet.')
 
     return []
 
 
-def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, image_enc, exp_ptp):
-    errors = check_params(image, filename, folder, image_enc, exp_pal, exp_ptp)
+def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, encoding, paltxt_file):
+    errors = check_params(image, filename, folder, encoding, exp_pal, paltxt_file)
     if errors:
         gimp.message("\n".join(errors))
         return
@@ -190,7 +190,7 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
         pal9bits[i * 2 + 1] = (g >> 5)
         txtpal[i] = (r >> 5, g >> 5, b >> 5)
 
-    if exp_ptp:
+    if paltxt_file:
         file = open(os.path.join(folder, '%s.TXT' % filename), 'wt')
         print('SCREEN 5 palette:', file=file)
         i = 0
@@ -206,15 +206,15 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
         file.write(encoded)
         file.close()
 
-    connector.set_progress(text="Exporting image to {} format".format(image_enc))
+    connector.set_progress(text="Exporting image to {} format".format(encoding))
 
     # buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
-    if image_enc == 'DAT':
+    if encoding == 'DAT':
         buffer = [0] * (connector.width // 2) * connector.height
     else:
         buffer = [0] * (MAX_WIDTH // 2) * MAX_HEIGHT
 
-    if image_enc != 'no-output':
+    if encoding != 'no-output':
         for y in range(0, connector.height):
             for x in range(0, connector.width):
                 r, g, b, a = connector.get_pixel(x, y)
@@ -229,16 +229,16 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
             connector.set_progress(float(y) / connector.height)
 
         # Embed palette into image data (SC5 only)
-        if image_enc == 'SC5':
+        if encoding == 'SC5':
             for pos in range(32):
                 buffer[0x7680 + pos] = pal9bits[pos]
-        if image_enc == 'RAW':
+        if encoding == 'RAW':
             encoded = struct.pack('<{}B'.format(len(buffer)), *buffer)
-        elif image_enc == 'DAT':
+        elif encoding == 'DAT':
             encoded = struct.pack('<HH{}B'.format(connector.width * connector.height // 2), connector.width, connector.height, *buffer)
         else:
             encoded = struct.pack('<BHHH{}B'.format(len(buffer)), BIN_PREFIX, 0, len(buffer), 0, *buffer)
-        file = open(os.path.join(folder, '%s.%s' % (filename, image_enc)), 'wb')
+        file = open(os.path.join(folder, '%s.%s' % (filename, encoding)), 'wb')
         file.write(encoded)
         file.close()
         gimp.delete(new_image)
@@ -356,7 +356,7 @@ def downsampling(connector, trans_color, dithering):
         connector.set_progress(float(y) / connector.height)
 
 
-def write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, image_enc, exp_ptp):
+def write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, encoding, paltxt_file):
     '''
     Export image to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -368,16 +368,16 @@ def write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, tr
     @param exp_pal: export palette data too
     @param skip_index0: transparency support uses color index 0
     @param trans_color: RGB components of input color to be considered transparency
-    @param image_enc: output encoding
-    @param exp_ptp: export plain-text-palette data too
+    @param encoding: output encoding
+    @param paltxt_file: export plain-text-palette data too
     '''
     try:
-        do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, image_enc, exp_ptp)
+        do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, encoding, paltxt_file)
     except Exception:
         gimp.message(traceback.format_exc())
 
 
-def write_g4_alpha(image, layer, filename, folder, dithering, exp_pal, image_enc, exp_ptp):
+def write_g4_alpha(image, layer, filename, folder, dithering, exp_pal, encoding, paltxt_file):
     '''
     Export image with alpha to GRAPHICS 4, a.k.a. SCREEN 5 (MSX2).
     
@@ -387,11 +387,11 @@ def write_g4_alpha(image, layer, filename, folder, dithering, exp_pal, image_enc
     @param folder: output directory
     @param dithering: whether dithering is active
     @param exp_pal: export palette data too
-    @param image_enc: output encoding
-    @param exp_ptp: export plain-text-palette data too
+    @param encoding: output encoding
+    @param paltxt_file: export plain-text-palette data too
     '''
     try:
-        do_write_g4(image, layer, filename, folder, dithering, exp_pal, True, None, image_enc, exp_ptp)
+        do_write_g4(image, layer, filename, folder, dithering, exp_pal, True, None, encoding, paltxt_file)
     except Exception:
         gimp.message(traceback.format_exc())
 
@@ -414,7 +414,7 @@ gimpfu.register("msx_g4_exporter",
                         ("MSX-BASIC COPY to disk (no palette)", "DAT"),
                         ("Raw file (no palette)", "RAW"),
                         ("No output (image in new window)", "no-output"))),
-                    (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
+                    (gimpfu.PF_BOOL, "paltxt_file", "Export plain text palette", False)
                 ],
                 [],
                 write_g4)
@@ -435,7 +435,7 @@ gimpfu.register("msx_g4_exporter_alpha",
                         ("MSX-BASIC COPY to disk (no palette)", "DAT"),
                         ("Raw file (no palette)", "RAW"),
                         ("No output (image in new window)", "no-output"))),
-                    (gimpfu.PF_BOOL, "exp-ptp", "Export plain text palette", False)
+                    (gimpfu.PF_BOOL, "paltxt-file", "Export plain text palette", False)
                 ],
                 [],
                 write_g4_alpha)
