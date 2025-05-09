@@ -18,6 +18,7 @@ import os
 import struct
 import traceback
 import sys
+from pprint import pprint
 from math import sqrt
 
 
@@ -57,18 +58,20 @@ class NoTransparentColorError(Exception): pass
 
 
 def create_distance_query(palette):
+    """Create function that returns the nearest colour by value."""
     palmap = {k:v for k, v in palette}
-
     def query_index(pixel):
         pixel = pixel[0:3]  # remove alpha channel
         idx = palmap.get(pixel)
-        if idx:
-            return palette[idx][1], palette[idx][0]
+        # Exact match
+        if idx: return palette[idx][1], palette[idx][0]
         distances = [(idx, distance(pixel, color), color) for color, idx in palette]
-        mdst = min(distances, key=tuple_value)
-        #print('pixel =', pixel, ' distances =', distances, ' min =', mdst, file=sys.stdout)
-        palmap[pixel] = mdst[0]
-        return mdst[0], mdst[2]
+        nearest = min(distances, key=tuple_value)
+        #pprint(('pixel =', pixel, ' distances =', distances, ' min =', nearest))
+        # Store value for fast lookup
+        palmap[pixel] = nearest[0]
+        # index and colour
+        return nearest[0], nearest[2]
 
     return query_index
 
@@ -284,11 +287,10 @@ def create_histogram(connector, trans_color):
     for y in range(connector.height):
         for x in range(connector.width):
             r, g, b, a = connector.get_pixel(x, y)
-            if (r, g, b) == trans_color[0:3]:
-                continue
+            if (r, g, b) == trans_color[0:3]: continue
             histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
         connector.set_progress(float(y) / connector.height)
-    #print("histogram: ", histogram, file=sys.stdout)
+    #pprint(("histogram: ", sorted(histogram.items(), key=tuple_value, reverse=True)[0:16]))
     return histogram.items()
 
 
@@ -306,24 +308,24 @@ def quantize_colors(connector, histogram, length):
     connector.set_progress(text="Quantizing colors...")
     hist = list(histogram)
     while len(hist) > length:
-        # Order histogram by color usage (this is slooooooow!)
+        # Order histogram by color usage
         hist.sort(key=tuple_value)
 
-        # Get least frequent item and its nearest cousin by colour
+        # Replace least frequent item by its nearest cousin by colour distance
         color1, freq = hist.pop(0)
         distances = [
             (idx, distance(color1, color2)) for idx, (color2, ignored) in enumerate(hist[1:], start=1)
         ]
-        index, ignored = min(distances, key=tuple_value)
+        nearest, ignored = min(distances, key=tuple_value)
 
         # add removed item's frequency into nearest cousin's frequency
-        hist[index] = (hist[index][0], hist[index][1] + freq)
+        hist[nearest] = (hist[nearest][0], hist[nearest][1] + freq)
         connector.set_progress(len(hist) / float(length))
 
     for index, (color, ignored) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
 
-    #print("palette: ", palette, file=sys.stdout)
+    #pprint(("palette", palette))
     return palette
 
 
@@ -338,11 +340,10 @@ def scatter_noise(connector, x, y, error):
     NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
     for offset_x, offset_y, debt in NEIGHBORS:
         off_x, off_y = x + offset_x, y + offset_y
-        if off_x < 0 or off_y < 0 or off_x >= connector.width or off_y >= connector.height:
-            continue
+        if off_x < 0 or off_y < 0 or off_x >= connector.width or off_y >= connector.height: continue
         pixel = connector.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel[0:3], error))
-        #print('pos:', (off_x, off_y), ':', pixel[0:3], "->", npixel, file=sys.stdout)
+        #pprint(('pos:', (off_x, off_y), ':', pixel[0:3], "->", npixel))
         connector.set_pixel(off_x, off_y, npixel)
 
 
