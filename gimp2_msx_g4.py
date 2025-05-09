@@ -137,7 +137,6 @@ def check_params(image, filename, folder, image_enc, exp_pal, exp_ptp):
 
 
 def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0, trans_color, image_enc, exp_ptp):
-    global _
     errors = check_params(image, filename, folder, image_enc, exp_pal, exp_ptp)
     if errors:
         gimp.message("\n".join(errors))
@@ -159,7 +158,7 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
 
     # Check if image is indexed or grayscale and convert to RGB.
     palette = []
-    max_colors = MAX_COLORS - 1 if skip_index0 else 0 
+    max_colors = MAX_COLORS - (1 if skip_index0 else 0)
     type_ = gimpfu.pdb.gimp_image_base_type(new_image);
     if type_ == INDEXED:
         num_bytes, colormap = gimpfu.pdb.gimp_image_get_colormap(new_image)
@@ -186,7 +185,7 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
 
     for (r, g, b), index in palette:
         # Start palette at color 1 if transparency is set.
-        i = index + 1 if skip_index0 else 0
+        i = index + (1 if skip_index0 else 0)
         pal9bits[i * 2] = 16 * (r >> 5) + (b >> 5)
         pal9bits[i * 2 + 1] = (g >> 5)
         txtpal[i] = (r >> 5, g >> 5, b >> 5)
@@ -251,7 +250,6 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
 
 def preprocess_image(connector, trans_color):
     """Pre-process image and gather all used colors."""
-    global _
     colormap = {}
     used_transparency = 0
     connector.set_progress(text="Searching alpha channel...")
@@ -276,7 +274,6 @@ def preprocess_image(connector, trans_color):
 
 
 def create_histogram(connector, trans_color):
-    global _
     histogram = {}
     connector.set_progress(text="Creating histogram...")
     for y in range(connector.height):
@@ -300,25 +297,25 @@ def distance(src, dst):
 
 def quantize_colors(connector, histogram, length):
     """Group similar colours reducing palette to "length"."""
-    global _
     palette = []
     connector.set_progress(text="Quantizing colors...")
-    while len(histogram) > length:
+    hist = list(histogram)
+    while len(hist) > length:
         # Order histogram by color usage (this is slooooooow!)
-        histogram.sort(key=tuple_value)
+        hist.sort(key=tuple_value)
 
         # Get least frequent item and its nearest cousin by colour
-        color1, freq = histogram.pop(0)
+        color1, freq = hist.pop(0)
         distances = [
-            (idx, distance(color1, color2)) for idx, (color2, _) in enumerate(histogram[1:], start=1)
+            (idx, distance(color1, color2)) for idx, (color2, ignored) in enumerate(hist[1:], start=1)
         ]
-        index, _ = min(distances, key=tuple_value)
+        index, ignored = min(distances, key=tuple_value)
 
         # add removed item's frequency into nearest cousin's frequency
-        histogram[index] = (histogram[index][0], histogram[index][1] + freq)
-        connector.set_progress(len(histogram) / float(length))
+        hist[index] = (hist[index][0], hist[index][1] + freq)
+        connector.set_progress(len(hist) / float(length))
 
-    for index, (color, _) in enumerate(sorted(histogram, key=tuple_key)):
+    for index, (color, ignored) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
 
     return palette
@@ -345,7 +342,6 @@ def scatter_noise(connector, x, y, error):
 
 def downsampling(connector, trans_color, dithering):
     """Reduction to 9-bit palette with optional dithering."""
-    global _
     connector.set_progress(text="Downsampling with dithering..." if dithering else "Downsampling...")
     for y in range(connector.height):
         for x in range(connector.width):
