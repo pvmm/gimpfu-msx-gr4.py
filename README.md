@@ -84,6 +84,8 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 
 ## TODO
 
+* [ ] divide big files into 8 or 16K chunks for ROM/mapper if requested;
+  * [ ] compress chunks individually;
 * [ ] allow different palette conversion functions;
 * [ ] ordered dithering;
 * [x] make it faster;
