@@ -66,7 +66,7 @@ def create_distance_query(palette):
             return palette[idx][1], palette[idx][0]
         distances = [(idx, distance(pixel, color), color) for color, idx in palette]
         mdst = min(distances, key=tuple_value)
-        #print('pixel =', pixel, ' distances =', distances, ' min =', mdst)
+        #print('pixel =', pixel, ' distances =', distances, ' min =', mdst, file=sys.stdout)
         palmap[pixel] = mdst[0]
         return mdst[0], mdst[2]
 
@@ -288,6 +288,7 @@ def create_histogram(connector, trans_color):
                 continue
             histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
         connector.set_progress(float(y) / connector.height)
+    #print("histogram: ", histogram, file=sys.stdout)
     return histogram.items()
 
 
@@ -341,7 +342,7 @@ def scatter_noise(connector, x, y, error):
             continue
         pixel = connector.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel[0:3], error))
-        #print('pos:', (off_x, off_y), ':', pixel[0:3], "->", npixel)
+        #print('pos:', (off_x, off_y), ':', pixel[0:3], "->", npixel, file=sys.stdout)
         connector.set_pixel(off_x, off_y, npixel)
 
 
