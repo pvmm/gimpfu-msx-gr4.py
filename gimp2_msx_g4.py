@@ -17,6 +17,7 @@ import gimp
 import os
 import struct
 import traceback
+import sys
 from math import sqrt
 
 
@@ -59,12 +60,13 @@ def create_distance_query(palette):
     palmap = {k:v for k, v in palette}
 
     def query_index(pixel):
+        pixel = pixel[0:3]  # remove alpha channel
         idx = palmap.get(pixel)
         if idx:
             return palette[idx][1], palette[idx][0]
-        dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
-        mdst = min(dsts, key=tuple_value)
-        #print('pixel =', pixel, ' distances =', dsts, ' min =', mdst)
+        distances = [(idx, distance(pixel, color), color) for color, idx in palette]
+        mdst = min(distances, key=tuple_value)
+        #print('pixel =', pixel, ' distances =', distances, ' min =', mdst)
         palmap[pixel] = mdst[0]
         return mdst[0], mdst[2]
 
@@ -87,9 +89,10 @@ class PluginConnector:
         return self.buffer[x + self.width * y]
 
 
-    def set_pixel(self, x, y, (r, g, b, a)):
+    def set_pixel(self, x, y, pixel):
         # make sure pixel is a tuple of integers
-        self.buffer[x + self.width * y] = (int(r), int(g), int(b), int(a))
+        r, g, b = pixel[0:3]
+        self.buffer[x + self.width * y] = (int(r), int(g), int(b), 255)
 
 
     def flush(self):
@@ -175,7 +178,7 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
     if not palette:
-        use_transparency, colormap = preprocess_image(connector, trans_color)
+        use_transparency = find_transparency(connector, trans_color)
         # disable dithering when transparency is used
         dithering = False if use_transparency else dithering
         downsampling(connector, trans_color, dithering)
@@ -243,14 +246,19 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
         file.close()
         gimp.delete(new_image)
     else:
+        for y in range(0, connector.height):
+            for x in range(0, connector.width):
+                c = connector.get_pixel(x, y)
+                _, d = query(c)
+                connector.set_pixel(x, y, d)
+            connector.set_progress(float(y) / connector.height)
         connector.flush()
         # create new image window
         gimpfu.pdb.gimp_display_new(new_image)
 
 
-def preprocess_image(connector, trans_color):
+def find_transparency(connector, trans_color):
     """Pre-process image and gather all used colors."""
-    colormap = {}
     used_transparency = 0
     connector.set_progress(text="Searching alpha channel...")
     for y in range(connector.height):
@@ -263,14 +271,11 @@ def preprocess_image(connector, trans_color):
                     raise NoTransparentColorError("Transparent pixel not expected but found in image.")
                 # replace alpha channel set to 0 with trans_color
                 connector.set_pixel(x, y, trans_color)
-                colormap[(r, g, b)] = colormap.get(trans_color[0:3], 0) + 1
                 used_transparency = 1
             elif (r, g, b) == trans_color[0:3]:
                 used_transparency = 1
-            else:
-                colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
         connector.set_progress(float(y) / connector.height)
-    return used_transparency, colormap
+    return used_transparency
 
 
 def create_histogram(connector, trans_color):
@@ -289,7 +294,6 @@ def create_histogram(connector, trans_color):
 def distance(src, dst):
     r1, g1, b1 = src
     r2, g2, b2 = dst
-
     return sqrt(
         (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
     )
@@ -318,6 +322,7 @@ def quantize_colors(connector, histogram, length):
     for index, (color, ignored) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
 
+    #print("palette: ", palette, file=sys.stdout)
     return palette
 
 
@@ -337,7 +342,7 @@ def scatter_noise(connector, x, y, error):
         pixel = connector.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel[0:3], error))
         #print('pos:', (off_x, off_y), ':', pixel[0:3], "->", npixel)
-        connector.set_pixel(off_x, off_y, npixel + (255,))
+        connector.set_pixel(off_x, off_y, npixel)
 
 
 def downsampling(connector, trans_color, dithering):
