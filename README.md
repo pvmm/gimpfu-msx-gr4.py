@@ -87,7 +87,7 @@ A palette file (NONAME.PAL) is still recommended to restore the image properly.
 * [ ] divide big files into 8 or 16K chunks for ROM/mapper if requested;
   * [ ] compress chunks individually;
 * [ ] allow different palette conversion functions;
-* [ ] ordered dithering;
+* [ ] ordered dithering (and other dithering patterns);
 * [x] make it faster;
 * [x] enable or disable transparent colour;
 * [x] palette export;
