@@ -62,15 +62,15 @@ def create_distance_query(palette):
     palmap = {k:v for k, v in palette}
     def query_index(pixel):
         pixel = pixel[0:3]  # remove alpha channel
-        idx = palmap.get(pixel)
-        # Exact match
-        if idx: return palette[idx][1], palette[idx][0]
-        distances = [(idx, distance(pixel, color), color) for color, idx in palette]
+        i = palmap.get(pixel)
+        # Exact match returns (index and colour tuple)
+        if i: return palette[i][1], palette[i][0]
+        distances = [(i, distance(pixel, color), color) for color, i in palette]
         nearest = min(distances, key=tuple_value)
         #pprint(('pixel =', pixel, ' distances =', distances, ' min =', nearest))
-        # Store value for fast lookup
+        # Store value for fast lookup next time
         palmap[pixel] = nearest[0]
-        # index and colour
+        # index and colour tuple
         return nearest[0], nearest[2]
 
     return query_index
@@ -181,7 +181,7 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
     if not palette:
-        use_transparency = find_transparency(connector, trans_color)
+        use_transparency = fix_transparency(connector, trans_color)
         # disable dithering when transparency is used
         dithering = False if use_transparency else dithering
         downsampling(connector, trans_color, dithering)
@@ -260,8 +260,8 @@ def do_write_g4(image, layer, filename, folder, dithering, exp_pal, skip_index0,
         gimpfu.pdb.gimp_display_new(new_image)
 
 
-def find_transparency(connector, trans_color):
-    """Pre-process image and gather all used colors."""
+def fix_transparency(connector, trans_color):
+    """Remove alpha channel and find if transparency is really used."""
     used_transparency = 0
     connector.set_progress(text="Searching alpha channel...")
     for y in range(connector.height):

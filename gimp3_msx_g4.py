@@ -166,20 +166,20 @@ def create_distance_query(palette):
     palmap = {k:v for k, v in palette}
     def query_index(pixel):
         idx = palmap.get(pixel)
-        # Exact match, returns (index, colour tuple)
+        # Exact match returns (index, colour tuple)
         if idx: return palette[idx][1], palette[idx][0]
         distances = [(idx, distance(pixel, color), color) for color, idx in palette]
         nearest = min(distances, key=lambda triple: triple[1])
         #pprint(('pixel =', pixel, ' distances =', distances, ' min =', nearest))
-        # Store value for fast lookup
+        # Store value for fast lookup next time
         palmap[pixel] = nearest[0]
         # index and colour tuple
         return nearest[0], nearest[2]
     return query_index
 
 
-def find_transparency(connector, trans_color):
-    """Pre-process image and gather all used colors."""
+def fix_transparency(connector, trans_color):
+    """Remove alpha channel and find if transparency is really used."""
     used_transparency = False
     connector.set_progress(text=_("Pre-processing image..."))
     for y in range(0, connector.height):
@@ -234,7 +234,7 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
     pal9bits = [0] * 2 * MAX_COLORS
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
-    used_transparency = find_transparency(connector, trans_color)
+    used_transparency = fix_transparency(connector, trans_color)
     if not used_transparency:
         trans_color = NOTRANS
     else:
