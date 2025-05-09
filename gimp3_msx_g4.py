@@ -26,8 +26,10 @@ from gi.repository import Gegl
 from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import Gio
+
 from contextlib import suppress
 from math import sqrt
+from pprint import pprint
 
 import os
 import sys
@@ -87,23 +89,20 @@ def scatter_noise(connector, x, y, error):
     NEIGHBORS = ( (+1, 0, 7.0/16), (-1, +1, 3.0/16), (-1, +1, 5.0/16), (+1, +1, 1.0/16) )
     for offset_x, offset_y, debt in NEIGHBORS:
         off_x, off_y = x + offset_x, y + offset_y
-        if off_x < 0 or off_y < 0 or off_x >= connector.width or off_y >= connector.height:
-            continue
+        if off_x < 0 or off_y < 0 or off_x >= connector.width or off_y >= connector.height: continue
         pixel = connector.get_pixel(off_x, off_y)[0:3]
         npixel = tuple(max(0, min(255, round(color + error * debt))) for color, error in zip(pixel, error))
-        #print('pos:', (off_x, off_y), ':', pixel, '->', npixel)
-        connector.set_pixel(off_x, off_y, npixel + (255,))
+        #pprint(('scatter noise: pos:', (off_x, off_y), ':', pixel, '->', npixel))
+        connector.set_pixel(off_x, off_y, npixel)
 
 
 def downsampling(connector, trans_color, dithering):
-    global _
     connector.set_progress(text=_("Downsampling..."))
-    trans_color = trans_color[0:3] + (255,)
     for y in range(connector.height):
         for x in range(connector.width):
-            r, g, b, a = connector.get_pixel(x, y)
-            if (r, g, b) != trans_color[0:3]:
-                d = compress_rgb(r, g, b)
+            c = connector.get_pixel(x, y)
+            if c[0:3] != trans_color[0:3]:
+                d = compress_rgb(*c)
                 connector.set_pixel(x, y, d)
                 if dithering:
                     # ignore alpha channel in both pixels
@@ -113,15 +112,15 @@ def downsampling(connector, trans_color, dithering):
 
 
 def create_histogram(connector, trans_color):
-    global _
     histogram = {}
     connector.set_progress(text=_('Creating histogram...'))
     for y in range(connector.height):
         for x in range(connector.width):
-            c = connector.get_pixel(x, y)
-            if c[0:3] == trans_color[0:3]: continue
-            histogram[(c[0], c[1], c[2])] = histogram.get((c[0], c[1], c[2]), 0) + 1
+            r, g, b, a = connector.get_pixel(x, y)
+            if (r, g, b) == trans_color[0:3]: continue
+            histogram[(r, g, b)] = histogram.get((r, g, b), 0) + 1
         connector.set_progress(y / connector.height)
+    #pprint(("histogram: ", sorted(histogram.items(), key=tuple_value, reverse=True)[0:16]))
     return histogram.items()
 
 
@@ -142,65 +141,62 @@ def quantize_colors(connector, histogram, length):
     hist = list(histogram)
     connector.set_progress(text=_("Quantizing colors..."))
     while len(hist) > length:
-        # Order histogram by color usage (this is slooooooow!)
+        # Order histogram by color usage
         hist = sorted(hist, key=tuple_value)
-        #histogram.sort(key=tuple_value)
 
-        # Get least frequent item and its nearest cousin by colour
+        # Replace least frequent item by its nearest cousin by colour distance
         color1, freq = hist.pop(0)
         distances = [
             (idx, distance(color1, color2)) for idx, (color2, ignored) in enumerate(hist[1:], start=1)
         ]
-        index, ignored = min(distances, key=tuple_value)
+        nearest, ignored = min(distances, key=tuple_value)
 
         # add removed item's frequency into nearest cousin's frequency
-        hist[index] = (hist[index][0], hist[index][1] + freq)
+        hist[nearest] = (hist[nearest][0], hist[nearest][1] + freq)
         connector.set_progress(len(hist) / length)
 
     for index, (color, ignored) in enumerate(sorted(hist, key=tuple_key)):
         palette.append((color, index))
+    #pprint(("palette", palette))
     return palette
 
 
 def create_distance_query(palette):
+    """Create function that returns the nearest colour by value."""
     palmap = {k:v for k, v in palette}
-
     def query_index(pixel):
         idx = palmap.get(pixel)
-        if idx:
-            return palette[idx][1], palette[idx][0]
-        dsts = [(idx, distance(pixel, color), color) for color, idx in palette]
-        mdst = min(dsts, key=tuple_value)
-        #print('pixel =', pixel, ' distances =', dsts, ' min =', mdst)
-        palmap[pixel] = mdst[0]
-        return mdst[0], mdst[2]
-
+        # Exact match, returns (index, colour tuple)
+        if idx: return palette[idx][1], palette[idx][0]
+        distances = [(idx, distance(pixel, color), color) for color, idx in palette]
+        nearest = min(distances, key=lambda triple: triple[1])
+        #pprint(('pixel =', pixel, ' distances =', distances, ' min =', nearest))
+        # Store value for fast lookup
+        palmap[pixel] = nearest[0]
+        # index and colour tuple
+        return nearest[0], nearest[2]
     return query_index
 
 
-def preprocess_image(connector, trans_color):
+def find_transparency(connector, trans_color):
     """Pre-process image and gather all used colors."""
-    global _
-    colormap = {}
     used_transparency = False
     connector.set_progress(text=_("Pre-processing image..."))
     for y in range(0, connector.height):
         for x in range(0, connector.width):
-            r, g, b, a = connector.get_pixel(x, y)
+            (r, g, b, a) = connector.get_pixel(x, y)
             if not a in (0, 255):
                 raise InvalidAlphaValueError(_("Invalid alpha value {} (0 or 255 expected).").format(a))
             elif a == 0:
                 if trans_color == NOTRANS:
                     raise NoTransparentColorError(_("Transparent pixel not expected but found in image."))
+                # replace alpha with trans_color
                 connector.set_pixel(x, y, trans_color)
-                colormap[(r, g, b)] = colormap.get(trans_color, 0) + 1
-                used_transparency = 1
+                used_transparency = True
             elif (r, g, b) == trans_color[0:3]:
-                used_transparency = 1
-            else:
-                colormap[(r, g, b)] = colormap.get((r, g, b), 0) + 1
+                used_transparency = True
         connector.set_progress(y / connector.height)
-    return used_transparency, colormap
+    return used_transparency
 
 
 def convert(connector, *args):
@@ -238,12 +234,13 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
     pal9bits = [0] * 2 * MAX_COLORS
     txtpal = [(0, 0, 0)] * MAX_COLORS
 
-    used_transparency, colormap = preprocess_image(connector, trans_color)
+    used_transparency = find_transparency(connector, trans_color)
     if not used_transparency:
         trans_color = NOTRANS
     else:
         # disable dithering when transparency is used
-        dithering = 0
+        dithering = False
+
     # downsampling happens in place
     downsampling(connector, trans_color, dithering)
     histogram = create_histogram(connector, trans_color)
@@ -252,7 +249,7 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
 
     for (r, g, b), index in palette:
         # Start palette at color 1 if transparency is used.
-        i = index + used_transparency
+        i = index + (1 if used_transparency else 0)
         pal9bits[i * 2] = 16 * (r >> 5) + (b >> 5)
         pal9bits[i * 2 + 1] = (g >> 5)
         txtpal[i] = (r >> 5, g >> 5, b >> 5)
@@ -272,15 +269,14 @@ def do_convert(connector, filename, folder, dithering, export_pal, skip_index0, 
                 print("16-color palette:", file=file)
                 for i, ((r, g, b), ignored) in enumerate(palette):
                     print('%i: %i, %i, %i' % (i, r, g, b), file=file)
-        # complete buffer
-        buffer = [0] * connector.width * connector.height
         for y in range(connector.height):
             for x in range(connector.width):
-                r, g, b, a = connector.get_pixel(x, y)
+                c = connector.get_pixel(x, y)
                 # keep transparent colour selected since this is not the MSX.
-                if (r, g, b) != trans_color[0:3]:
-                    index, (r, g, b) = query((r, g, b))
-                connector.set_pixel(x, y, (r, g, b, 255))
+                if c != trans_color[0:3]:
+                    ignored, d = query(c[0:3])
+                    #pprint(("c:", c, ", d:", d))
+                    connector.set_pixel(x, y, d)
             connector.set_progress(y/connector.height)
         # Display the duplicated image
         connector.set_progress(status=(DUPLICATE, connector.buffer))
@@ -363,11 +359,6 @@ class Graph4Exporter (Gimp.PlugIn):
             error = GLib.Error.new_literal(Gimp.PlugIn.error_quark(), msg, 0)
             return procedure.new_return_values(Gimp.PDBStatusType.CALLING_ERROR, error)
         else:
-            # add alpha channel to image if needed
-            if not drawables[0].has_alpha:
-                self.image = image.duplicate()
-                drawables = self.image.get_layers()
-                drawables[0].add_alpha()
             self.image = image
             self.drawable = drawables[0]
 
@@ -524,7 +515,7 @@ class Graph4Exporter (Gimp.PlugIn):
                 Gimp.PDBStatusType.CALLING_ERROR,
                 GLib.Error.new_literal(Gimp.PlugIn.error_quark(), self.done_args, 0))
         if self.status == DUPLICATE:
-            # arg is a new image buffer
+            # done_args has the new image buffer
             image = self.image.duplicate()
             drawable = image.get_layers()[0]
             self.update_drawable(drawable, self.done_args)
@@ -540,7 +531,7 @@ class Graph4Exporter (Gimp.PlugIn):
         # convert back list of tuples of 4 bytes to bytearray
         flat_list = [channel for pixel in buf for channel in pixel]
         buffer.set(Gegl.Rectangle.new(0, 0, drawable.get_width(), drawable.get_height()), "R'G'B'A u8",
-            bytearray(flat_list))
+                   bytearray(flat_list))
 
     def done(self, *args):
         self.status, self.done_args = args
@@ -551,8 +542,8 @@ class PluginConnector:
     def __init__(self, plugin):
         self.plugin = plugin                    # will never call it directly
         # In screen 5 only even sizes are permitted.
-        self.width = plugin.drawable.get_width() & ~1
-        self.height = plugin.drawable.get_height() & ~1
+        self.width = plugin.drawable.get_width()
+        self.height = plugin.drawable.get_height()
         # convert bytearray buffer in list of tuples of 4 bytes
         tmp = plugin.drawable.get_buffer().get(Gegl.Rectangle.new(0, 0, self.width, self.height),
             1.0, "R'G'B'A u8", Gegl.AUTO_ROWSTRIDE)
@@ -567,7 +558,8 @@ class PluginConnector:
             if text: GLib.idle_add(lambda: Gimp.progress_init(text))
 
     def set_pixel(self, x, y, pixel):
-        self.buffer[x + y * self.width] = pixel
+        r, g, b = pixel[0:3]
+        self.buffer[x + y * self.width] = (int(r), int(g), int(b), 255)
 
     def get_pixel(self, x, y):
         return self.buffer[x + y * self.width]
